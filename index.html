@@ -421,6 +421,8 @@ const C = {
   PAY_WATCH_MIN:     5,      // сколько минут игра доспрашивает сервер, если оплату не подтвердил клиент
   PAY_WATCH_SEC:     3,      // как часто она это делает, с
   PAY_SYNC_SEC:      20,     // через сколько секунд после покупки тихо сверить счёт с сервером, с
+  PING_EVERY_SEC:    300,    // как часто отправлять на сервер накопленное время в игре, с
+  PING_MIN_SEC:      20,     // меньше этого не отправляем — не гоняем сеть впустую, с
   BOARD_COLS:        5,      // колонок на поле
   BOARD_ROWS:        5,      // рядов на поле
   ROWS_START:        5,      // открыто рядов на старте (всё поле сразу)
@@ -670,6 +672,42 @@ async function pullServer(){
     renderAll(); save();
   }catch(e){}
 }
+
+/* ---------- СЧЁТЧИК ВРЕМЕНИ В ИГРЕ ----------
+   Считаем только секунды, когда игра реально на экране: свернул — счёт встал.
+   Копим у себя и отправляем пачкой раз в PING_EVERY_SEC, а также при уходе
+   со страницы. Так на сервере получается одна запись вместо сотни. */
+let liveSec = 0, liveTs = Date.now(), pingTs = Date.now();
+function tickLive(){
+  const now = Date.now();
+  const gap = (now - liveTs) / 1000;
+  liveTs = now;
+  // пауза больше минуты — значит игра была свёрнута, это время не наше
+  if(document.visibilityState === 'visible' && gap > 0 && gap < 60) liveSec += gap;
+  if(now - pingTs > C.PING_EVERY_SEC*1000) sendPing(false);
+}
+function sendPing(leaving){
+  if(PAY.mode !== 'live' || !PAY.backend) return;
+  const sec = Math.round(liveSec);
+  if(sec < C.PING_MIN_SEC) return;
+  liveSec = 0; pingTs = Date.now();
+  const name = (tg && tg.initDataUnsafe && tg.initDataUnsafe.user && tg.initDataUnsafe.user.first_name) || '';
+  const body = JSON.stringify({ initData:(tg && tg.initData) || '', sec, name });
+  try{
+    // при уходе обычный fetch могут не успеть отправить — шлём маячком
+    if(leaving && navigator.sendBeacon){
+      navigator.sendBeacon(PAY.backend + '/api/ping', new Blob([body], {type:'application/json'}));
+      return;
+    }
+    fetch(PAY.backend + '/api/ping', { method:'POST',
+      headers:{'Content-Type':'application/json'}, body, keepalive:true }).catch(()=>{});
+  }catch(e){}
+}
+document.addEventListener('visibilitychange', ()=>{
+  if(document.visibilityState === 'visible') liveTs = Date.now();   // вернулись — считаем заново
+  else sendPing(true);                                              // свернули — отдаём накопленное
+});
+window.addEventListener('pagehide', ()=>sendPing(true));
 
 /* ============ TELEGRAM ============ */
 const tg = (window.Telegram && window.Telegram.WebApp) ? window.Telegram.WebApp : null;
@@ -2448,6 +2486,7 @@ async function watchPayment(){
   await pullServer();
 }
 function loop(){
+  tickLive();
   watchPayment();
   tickEnergy();
   const hadHour = S.hour;
