@@ -405,6 +405,9 @@ const C = {
   APP_W:             360,    // базовая ширина раскладки, px (Galaxy A16: 1080/3)
   APP_H:             780,    // базовая высота раскладки, px (Galaxy A16: 2340/3)
   APP_MAX_W:         520,    // предел ширины на планшете и десктопе, px
+  PAY_TRIES:         14,     // сколько раз переспросить сервер после оплаты
+  PAY_WAIT_FAST:     600,    // пауза между первыми четырьмя попытками, мс
+  PAY_WAIT_SLOW:     1500,   // пауза между остальными попытками, мс
   BOARD_COLS:        5,      // колонок на поле
   BOARD_ROWS:        5,      // рядов на поле
   ROWS_START:        5,      // открыто рядов на старте (всё поле сразу)
@@ -610,8 +613,21 @@ const PAY = {
       const d = await r.json();
       if(!d.link) throw 0;
       tg.openInvoice(d.link, async st=>{
-        if(st === 'paid'){ await pullServer(); toast('Алмазы зачислены'); }
-        else toast(st === 'cancelled' ? 'Отменил' : 'Оплата не прошла');
+        if(st !== 'paid'){ toast(st === 'cancelled' ? 'Отменил' : 'Оплата не прошла'); return; }
+        /* Звёзды списаны, но сервер узнаёт об этом отдельным письмом от Telegram,
+           и оно приходит с задержкой в секунду-другую. Поэтому не спрашиваем один раз,
+           а переспрашиваем, пока покупка не появится: сначала часто, потом реже. */
+        const was = S.boughtApplied|0;
+        toast('Оплата прошла, зачисляем…');
+        for(let i = 0; i < C.PAY_TRIES; i++){
+          await pullServer();
+          if((S.boughtApplied|0) > was){
+            toast('+' + fmt(p.gems) + ' 💎'); SFX.gem(); haptic('ok');
+            return;
+          }
+          await new Promise(r=>setTimeout(r, i < 4 ? C.PAY_WAIT_FAST : C.PAY_WAIT_SLOW));
+        }
+        toast('Платёж принят, алмазы вот-вот придут');
       });
     }catch(e){ toast('Магазин недоступен'); }
   }
@@ -669,7 +685,7 @@ if(tg){ try{
   if(tg.setHeaderColor)            tg.setHeaderColor('#0A0E13');       // шапка в цвет игры
   if(tg.setBackgroundColor)        tg.setBackgroundColor('#05080B');   // фон за макетом
   if(tg.disableVerticalSwipes)     tg.disableVerticalSwipes();         // 7.7+: иначе перетаскивание сворачивает игру
-  if(tg.enableClosingConfirmation) tg.enableClosingConfirmation();     // 6.2+: спросить перед выходом
+  if(tg.disableClosingConfirmation) tg.disableClosingConfirmation();    // выходим без вопроса «всё равно закрыть?»
   const phone = tg.platform === 'android' || tg.platform === 'ios';
   const v8 = tg.isVersionAtLeast ? tg.isVersionAtLeast('8.0') : false;
   if(phone && v8 && tg.requestFullscreen){ try{ tg.requestFullscreen(); }catch(e){} }
