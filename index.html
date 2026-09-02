@@ -405,11 +405,9 @@ const C = {
   APP_W:             360,    // базовая ширина раскладки, px (Galaxy A16: 1080/3)
   APP_H:             780,    // базовая высота раскладки, px (Galaxy A16: 2340/3)
   APP_MAX_W:         520,    // предел ширины на планшете и десктопе, px
-  PAY_WATCH_MIN:     5,      // сколько минут после оплаты игра сама доспрашивает сервер
+  PAY_WATCH_MIN:     5,      // сколько минут игра доспрашивает сервер, если оплату не подтвердил клиент
   PAY_WATCH_SEC:     3,      // как часто она это делает, с
-  PAY_TRIES:         14,     // сколько раз переспросить сервер после оплаты
-  PAY_WAIT_FAST:     600,    // пауза между первыми четырьмя попытками, мс
-  PAY_WAIT_SLOW:     1500,   // пауза между остальными попытками, мс
+  PAY_SYNC_SEC:      20,     // через сколько секунд после покупки тихо сверить счёт с сервером, с
   BOARD_COLS:        5,      // колонок на поле
   BOARD_ROWS:        5,      // рядов на поле
   ROWS_START:        5,      // открыто рядов на старте (всё поле сразу)
@@ -623,17 +621,16 @@ const PAY = {
           S.payPending = 0; S.payPack = ''; save();
           toast(st === 'cancelled' ? 'Отменил' : 'Оплата не прошла'); return;
         }
-        /* Звёзды списаны, но сервер узнаёт об этом отдельным письмом от Telegram,
-           и оно приходит с задержкой в секунду-другую. Поэтому не спрашиваем один раз,
-           а переспрашиваем, пока покупка не появится: сначала часто, потом реже. */
-        const was = S.boughtApplied|0;
-        toast('Оплата прошла, зачисляем…');
-        for(let i = 0; i < C.PAY_TRIES; i++){
-          await pullServer();
-          if((S.boughtApplied|0) > was) return;   // pullServer уже зачислил и показал окно
-          await new Promise(r=>setTimeout(r, i < 4 ? C.PAY_WAIT_FAST : C.PAY_WAIT_SLOW));
-        }
-        toast('Платёж принят, алмазы вот-вот придут');
+        /* Telegram сказал «оплачено» — этого достаточно, начисляем сразу.
+           Ждать сервер нельзя: он узнаёт о платеже отдельным письмом, да ещё и
+           хранилище Cloudflare отдаёт свежую запись не мгновенно. Двойного
+           начисления не будет: boughtApplied двигаем вместе с алмазами, и когда
+           сервер догонит, разница окажется нулевой. */
+        S.gems += p.gems;
+        S.boughtApplied = (S.boughtApplied|0) + p.gems;
+        payDone(p.gems, p);
+        // Тихая сверка с сервером чуть позже — на случай покупки с другого телефона
+        setTimeout(()=>pullServer(), C.PAY_SYNC_SEC*1000);
       });
     }catch(e){ toast('Магазин недоступен'); }
   }
@@ -2407,9 +2404,9 @@ document.addEventListener('click', e=>{
 /* ============ ЦИКЛ ============ */
 /* Окно в самой игре сразу после зачисления. В бота ничего не пишем:
    переписка с ботом уводит человека из игры. */
-function payDone(gems){
-  const p = PACKS.find(x=>x.id === S.payPack);
-  S.payPending = 0; S.payPack = ''; save();
+function payDone(gems, pack){
+  const p = pack || PACKS.find(x=>x.id === S.payPack);
+  S.payPending = 0; S.payPack = ''; saveNow();
   SFX.gem(); haptic('ok'); renderAll();
   openSheet('<div class="bigem">💎</div>' +
     '<h3 class="sh-h">' + (p ? p.title + ' у тебя' : 'Алмазы зачислены') + '</h3>' +
