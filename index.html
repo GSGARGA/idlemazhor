@@ -5,10 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="theme-color" content="#0A0E13">
 <meta name="format-detection" content="telephone=no">
-<!-- SDK Telegram. Скрипт обязан идти ДО игрового кода: он создаёт window.Telegram.WebApp. -->
 <link rel="icon" href="assets/icon-32.png" sizes="32x32">
 <link rel="icon" href="assets/icon-192.png" sizes="192x192">
 <link rel="apple-touch-icon" href="assets/icon-192.png">
+<!-- SDK Telegram. Скрипт обязан идти ДО игрового кода: он создаёт window.Telegram.WebApp. -->
 <script src="https://telegram.org/js/telegram-web-app.js?63"></script>
 </head>
 <body>
@@ -39,9 +39,16 @@ body{
 button{font:inherit;color:inherit;border:0;background:none;cursor:pointer}
 :focus-visible{outline:2px solid var(--gold);outline-offset:2px}
 
-/* Макет жёстко 360 × 780 — экран Galaxy A16 (1080×2340 при DPR 3) */
+/* Игра всегда занимает весь экран телефона.
+   Раскладка считалась под 360 × 780 (Galaxy A16), но ширина и высота тянутся:
+   --app-w  предел ширины (планшет, десктоп), ставит JS из C.APP_MAX_W
+   --app-h  высота окна Telegram, ставит JS; без Telegram — 100dvh
+   --safe-* безопасные зоны: часы сверху, полоска жеста снизу, шапка Telegram */
 #app{
-  width:360px;height:min(100dvh,780px);display:flex;flex-direction:column;overflow:hidden;
+  width:100%;max-width:var(--app-w,520px);
+  height:var(--app-h,100dvh);
+  padding-top:var(--safe-top,0px);padding-bottom:var(--safe-bot,0px);
+  display:flex;flex-direction:column;overflow:hidden;
   background:radial-gradient(120% 55% at 50% 0%, #14202C 0%, var(--bg) 62%);
 }
 
@@ -307,7 +314,7 @@ h2.sec:first-child{margin-top:0}
 .timer{font-family:var(--disp);font-weight:700;font-size:13px;color:var(--red);text-align:center;margin-top:8px}
 
 #toasts{position:fixed;bottom:124px;left:0;right:0;z-index:120;display:flex;flex-direction:column-reverse;
-  align-items:center;gap:5px;pointer-events:none;max-width:360px;margin:0 auto;padding:0 10px}
+  align-items:center;gap:5px;pointer-events:none;max-width:var(--app-w,520px);margin:0 auto;padding:0 10px}
 .toast{background:#0E1720;border:1px solid var(--line2);border-radius:99px;padding:7px 14px;
   font-size:12px;font-weight:800;max-width:100%;text-align:center;line-height:1.3;animation:tin .25s ease}
 @keyframes tin{from{transform:translateY(-10px);opacity:0}}
@@ -395,8 +402,9 @@ const C = {
   SAVE_KEY:          'bvs_save',
   SAVE_DEBOUNCE_MS:  700,    // задержка перед записью сейва
 
-  APP_W:             360,    // ширина макета, px (Galaxy A16: 1080/3)
-  APP_H:             780,    // высота макета, px (Galaxy A16: 2340/3)
+  APP_W:             360,    // базовая ширина раскладки, px (Galaxy A16: 1080/3)
+  APP_H:             780,    // базовая высота раскладки, px (Galaxy A16: 2340/3)
+  APP_MAX_W:         520,    // предел ширины на планшете и десктопе, px
   BOARD_COLS:        5,      // колонок на поле
   BOARD_ROWS:        5,      // рядов на поле
   ROWS_START:        5,      // открыто рядов на старте (всё поле сразу)
@@ -631,14 +639,41 @@ function haptic(t){
     else tg.HapticFeedback.impactOccurred(t || 'light');
   }catch(e){}
 }
+/* ---------- ВО ВЕСЬ ЭКРАН ----------
+   Правило: игра всегда открывается на весь экран телефона, и на iOS, и на Android.
+   expand()          растягивает окно Telegram на всю высоту (есть везде);
+   requestFullscreen убирает и шапку Telegram (Bot API 8.0+, только телефоны);
+   безопасные зоны   отступы под часы, «чёлку», полоску жеста и кнопку закрытия —
+                     без них верх интерфейса уезжает под системные элементы. */
+function applyInsets(){
+  const root = document.documentElement;
+  root.style.setProperty('--app-w', C.APP_MAX_W + 'px');
+  if(!tg){ root.style.setProperty('--app-h', '100dvh'); try{ sizeBoard(); }catch(e){} return; }
+  const h = tg.viewportStableHeight || tg.viewportHeight || 0;
+  root.style.setProperty('--app-h', h ? h + 'px' : '100dvh');
+  const sa = tg.safeAreaInset || {}, ca = tg.contentSafeAreaInset || {};
+  root.style.setProperty('--safe-top', ((sa.top    || 0) + (ca.top    || 0)) + 'px');
+  root.style.setProperty('--safe-bot', ((sa.bottom || 0) + (ca.bottom || 0)) + 'px');
+  try{ sizeBoard(); }catch(e){}
+}
 if(tg){ try{
   tg.ready(); tg.expand();
   if(tg.setHeaderColor)            tg.setHeaderColor('#0A0E13');       // шапка в цвет игры
   if(tg.setBackgroundColor)        tg.setBackgroundColor('#05080B');   // фон за макетом
   if(tg.disableVerticalSwipes)     tg.disableVerticalSwipes();         // 7.7+: иначе перетаскивание сворачивает игру
   if(tg.enableClosingConfirmation) tg.enableClosingConfirmation();     // 6.2+: спросить перед выходом
-  if(tg.onEvent) tg.onEvent('viewportChanged', ()=>{ try{ sizeBoard(); }catch(e){} });
+  const phone = tg.platform === 'android' || tg.platform === 'ios';
+  const v8 = tg.isVersionAtLeast ? tg.isVersionAtLeast('8.0') : false;
+  if(phone && v8 && tg.requestFullscreen){ try{ tg.requestFullscreen(); }catch(e){} }
+  if(tg.onEvent){
+    ['viewportChanged','safeAreaChanged','contentSafeAreaChanged',
+     'fullscreenChanged','fullscreenFailed'].forEach(ev=>{
+       try{ tg.onEvent(ev, applyInsets); }catch(e){}
+     });
+  }
 }catch(e){} }
+applyInsets();
+window.addEventListener('resize', applyInsets);
 
 /* ============ ЗВУК: синтез на WebAudio, ни одного файла ============ */
 const SFX = {
