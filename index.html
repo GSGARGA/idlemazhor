@@ -444,7 +444,8 @@ const C = {
 
   ENERGY_MAX:        100,    // стартовый максимум энергии
   ENERGY_REGEN_SEC:  90,     // секунд на +1 энергии (без премиума)
-  ENERGY_TAP_COST:   2,      // энергии за тап по банкомату
+  ENERGY_TAP_COST:   2,      // базовая цена сброса банкомата, энергии
+  TAP_COST_STEP:     5,      // каждые столько уровней игрока сброс дорожает на 1
   ENERGY_CAN_PCT:    0.30,   // «Канистра» доливает эту долю бака
   STARTER_ENERGY_PCT: 3,     // «Подъёмные» дают столько баков энергии
   ENERGY_OFFLINE_CAP_H: 24,  // сколько часов офлайна копится энергия
@@ -458,6 +459,7 @@ const C = {
   PRODUCER_BACK:     6,      // на сколько уровней ниже станок выдаёт предмет
   SPECIAL_ENERGY_PCT: 0.25,  // Генератор даёт эту долю бака
   SPECIAL_GEMS:      8,      // сколько алмазов даёт Копилка за тап
+  SPECIAL_CD_MIN:    10,     // не чаще раза в столько минут появляется заряженный предмет
   SAFE_MULT:         2,      // во сколько раз Касса дороже обычной продажи
 
   XP_BASE:           50,     // опыт для 2-го уровня игрока
@@ -809,6 +811,7 @@ function fresh(){
     boughtApplied:0,       // сколько купленных за звёзды алмазов уже зачислено в игру
     payPending:0,          // время открытия счёта: пока стоит — игра доспрашивает сервер
     payPack:'',            // какой пак оплачивается — чтобы окно после покупки назвало его
+    spTs:0,                // когда последний раз выдали заряженный особый предмет
     level:1, xp:0, lvlTaken:1,
     energy:C.ENERGY_MAX, enTs:Date.now(),
     orders:[], orderCdUntil:0,
@@ -893,6 +896,7 @@ function migrate(raw){
   s.boughtApplied = Math.max(0, s.boughtApplied|0);   // v19 → v20: счётчик покупок за звёзды
   s.payPending = Math.max(0, +s.payPending || 0);
   if(typeof s.payPack !== 'string') s.payPack = '';
+  s.spTs = Math.max(0, +s.spTs || 0);
   s.magnets = Math.max(0, s.magnets|0);
   s.mergeStreak = clamp(s.mergeStreak|0, 0, C.MAGNET_PER_MERGES-1);
   if(!Array.isArray(s.orders)) s.orders = [];
@@ -1050,7 +1054,22 @@ function specialOf(l){
   for(const sp of SPECIALS) if(l >= sp.every && l % sp.every === 0) return sp;
   return null;
 }
-function chargesFor(l){ const sp = specialOf(l); return sp ? sp.ch : null; }
+/* Заряды выдаются не каждому особому предмету, а не чаще раза в SPECIAL_CD_MIN минут.
+   Иначе Футболка-Генератор (13 уровень) сыпется десятками и энергия перестаёт
+   что-либо ограничивать. Сам предмет падает как обычно — просто пустым. */
+/* Цена сброса банкомата: базовая плюс 1 за каждые TAP_COST_STEP уровней игрока.
+   На 1–4 уровне — 2, на 5-м — 3, на 20-м — 6. Бак тоже растёт с уровнем,
+   так что сбросов меньше не становится, но каждый весит дороже. */
+function tapCost(){ return C.ENERGY_TAP_COST + Math.floor(S.level / C.TAP_COST_STEP); }
+function chargesFor(l){
+  const sp = specialOf(l);
+  if(!sp) return null;
+  if(Date.now() - (S.spTs||0) < C.SPECIAL_CD_MIN*60000) return null;
+  S.spTs = Date.now();
+  return sp.ch;
+}
+// сколько осталось до следующего заряженного предмета, мс
+const specialCdLeft = () => Math.max(0, (S.spTs||0) + C.SPECIAL_CD_MIN*60000 - Date.now());
 
 /* ============ ЛЕСТНИЦА 50 УРОВНЕЙ ИГРОКА ============ */
 // Множитель награды: каждые LVL_REWARD_STEP уровней +50%, потолок ×10 (на 90-м уровне)
@@ -1123,7 +1142,7 @@ function genRoll(){
 }
 function genTap(){
   if(countFree() <= 0){ toast('Класть некуда'); SFX.err(); haptic('err'); return; }
-  if(!spendEnergy(C.ENERGY_TAP_COST)){ SFX.err(); haptic('err'); return; }
+  if(!spendEnergy(tapCost())){ SFX.err(); haptic('err'); return; }
   const n = (S.drop2Until > Date.now()) ? 2 : 1;
   for(let k=0;k<n;k++){
     if(countFree() <= 0) break;
@@ -1844,11 +1863,11 @@ function renderHud(){
   const need = xpNeed(S.level);
   $('#fXp').style.width = clamp(S.xp/need*100,0,100) + '%';
   $('#hXpT').textContent = S.level >= C.MAX_PLAYER_LVL ? 'максимум' : (Math.floor(S.xp) + '/' + need);
-  const sub = [emo(genMin()) + ' ' + nameOf(genMin())];
+  const sub = [emo(genMin()) + ' ' + nameOf(genMin()), '−' + tapCost() + ' ⚡'];
   if(S.drop2Until > Date.now()) sub.push('бешеный ' + mmss(S.drop2Until-Date.now()));
   else sub.push(C.GEN_STEP_QUESTS === 1 ? '+1 за задание' : 'до роста: ' + questsToNextGen());
   $('#genSub').textContent = sub.join(' · ');
-  $('#gen').classList.toggle('dead', S.energy < C.ENERGY_TAP_COST);
+  $('#gen').classList.toggle('dead', S.energy < tapCost());
   const pairs = countMergeable(), cd = S.mergeAllUntil - Date.now();
   const charged = (S.magnets|0) > 0;
   const bm = $('#btnMergeAll');
@@ -2267,7 +2286,9 @@ function helpSheet(){
         ? 'каждое задание поднимает сброс ровно на один уровень'
         : 'каждые ' + C.GEN_STEP_QUESTS + ' заданий — плюс один уровень, до следующего роста ' + questsToNextGen()) +
       '. Заданий ' + C.QUEST_COUNT +
-      ' в наборе, набор меняется каждый час, там же кнопка обновления.') +
+      ' в наборе, набор меняется каждый час, там же кнопка обновления. ' +
+      'Сброс стоит <b>' + tapCost() + ' ⚡</b> и дорожает на единицу каждые ' + C.TAP_COST_STEP +
+      ' уровней игрока — бак при этом тоже растёт.') +
     legalRow('🪙','Монеты дают: <b>заказы</b> сверху — платят в ' + C.ORDER_COIN_MULT +
       ' раз больше цены предмета, это главный источник; <b>Касса</b> 🏦 на уровнях 25, 50, 75 и 100 — ' +
       'тап даёт вдвое больше продажи; продажа предмета тапом; посылки. В магазине есть ' +
@@ -2282,7 +2303,10 @@ function helpSheet(){
     legalRow('🧲','Магнит слипает всё поле. Заряд даётся за каждые ' + C.MAGNET_PER_MERGES +
       ' слияний руками, без заряда — ожидание ' + C.MERGE_ALL_CD_MIN + ' минут. Пачку можно купить за алмазы.') +
     legalRow('🏭','Особые предметы с зарядами: Станок 🏭 выдаёт вещь попроще, Генератор 🔌 даёт энергию, ' +
-      'Копилка 💎 алмазы, Посылочный 📦 посылку. Тапай по ним.') +
+      'Копилка 💎 алмазы, Посылочный 📦 посылку. Тапай по ним. Заряженный предмет приходит ' +
+      'не чаще раза в ' + C.SPECIAL_CD_MIN + ' минут' +
+      (specialCdLeft() > 0 ? ' — следующий через ' + mmss(specialCdLeft()) : '') +
+      ', остальные такие же вещи падают пустыми.') +
     legalRow('🎁','В магазине бывает раздел «Пока дают»: ограниченные наборы за алмазы. ' +
       'Новый приходит каждые ' + C.OFFER_EVERY_MIN + ' минут и на каждый ' + C.OFFER_ON_LEVEL_EVERY +
       '-й уровень, больше ' + C.OFFER_MAX + ' сразу не висит. У каждого свой таймер — не успел, исчезает.') +
