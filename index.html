@@ -411,7 +411,7 @@ h2.sec:first-child{margin-top:0}
 
 /* ============ БЛОК КОНСТАНТ (весь баланс здесь) ============ */
 const C = {
-  SAVE_VERSION:      20,      // версия сейва; при росте запускается migrate()
+  SAVE_VERSION:      21,      // версия сейва; при росте запускается migrate()
   SAVE_KEY:          'bvs_save',
   SAVE_DEBOUNCE_MS:  700,    // задержка перед записью сейва
 
@@ -459,6 +459,10 @@ const C = {
   PRODUCER_BACK:     6,      // на сколько уровней ниже станок выдаёт предмет
   SPECIAL_ENERGY:    1,      // сколько энергии даёт Генератор за один тап
   SPECIAL_GEMS:      1,      // сколько алмазов даёт Копилка за тап
+  SPECIAL_CHANCE:    0.10,   // вероятность, что новый предмет придёт заряженным
+  SPECIAL_CH_STEP:   10,     // сначала плюс один заряд за каждые столько уровней
+  SPECIAL_CH_MAX:    5,      // столько зарядов набирается быстро, дальше медленно
+  SPECIAL_CH_SLOW:   50,     // после этого — плюс один заряд за каждые столько уровней
   SAFE_MULT:         2,      // во сколько раз Касса дороже обычной продажи
 
   XP_BASE:           50,     // опыт для 2-го уровня игрока
@@ -474,6 +478,7 @@ const C = {
   ORDER_CHEST_CHANCE:0.20,   // шанс посылки в награду
   ORDER_GEM_CHANCE:  0.14,   // шанс алмазов в награду
   ORDER_GEMS:        [3,8],  // сколько алмазов может дать заказ
+  ORDER_LVL_SPREAD:  10,     // насколько выше минимального сброса бывает заказ
   REROLL_FREE_DAY:   1,      // бесплатных смен всех заказов в день
   REROLL_GEMS:       20,     // цена смены заказов сверх лимита
 
@@ -804,7 +809,7 @@ const SLOTS_MAX = C.ORDER_SLOTS + C.ORDER_SLOTS_PREM;   // слотов в ра�
 function fresh(){
   return {
     v:C.SAVE_VERSION, savedAt:0,
-    board:new Array(CELLS).fill(null),  // {l:уровень, ch:заряды|null}
+    board:new Array(CELLS).fill(null),  // {l:уровень, ch:заряды|null, sp:тип заряда|null}
     rows:C.ROWS_START,
     coins:0, gems:0,       // на старте пусто — и монеты, и алмазы зарабатываются
     boughtApplied:0,       // сколько купленных за звёзды алмазов уже зачислено в игру
@@ -875,7 +880,14 @@ function migrate(raw){
   s.board = s.board.map(it=>{
     if(!it || typeof it !== 'object') return null;
     const l = clamp(it.l|0, 1, C.MAX_LVL);
-    return { l, ch: it.ch == null ? null : it.ch|0 };
+    /* v20 → v21: заряд перестал выводиться из уровня и хранится в предмете.
+       Старым заряженным вещам проставляем тип по прежнему правилу кратностей,
+       чтобы сохранённые Кассы и Станки не превратились в пустышки. */
+    let sp = it.sp;
+    if(sp == null && it.ch != null) sp = oldSpecialIdx(l);
+    if(sp != null && !SPECIALS[sp]) sp = null;
+    const ch = it.ch == null ? null : Math.max(0, it.ch|0);
+    return sp == null || !ch ? { l, ch:null, sp:null } : { l, ch, sp };
   });
   s.level = clamp(s.level|0 || 1, 1, C.MAX_PLAYER_LVL);
   s.seen  = clamp(s.seen|0 || 1, 1, C.MAX_LVL);
@@ -1036,26 +1048,54 @@ const cellOpen = i => i < S.rows * C.BOARD_COLS;
    тапаешь и получаешь пользу. Порядок в списке = приоритет, поэтому
    пересечений кратностей быть не может. */
 const SPECIALS = [
-  { every:25, type:'safe',     ch:1, ic:'🏦', name:'Касса',
-    desc:l=>'Тап: ' + fmt(price(l)*C.SAFE_MULT) + ' монет, предмет уходит' },
-  { every:10, type:'producer', ch:3, ic:'🏭', name:'Станок',
+  { type:'safe',     ch:1, ic:'🏦', name:'Касса',
+    desc:l=>'Тап: ' + fmt(price(l)*C.SAFE_MULT) + ' монет' },
+  { type:'producer', ch:3, ic:'🏭', name:'Станок',
     desc:l=>'Тап: выдаёт ' + nameOf(Math.max(1, l - C.PRODUCER_BACK)) },
-  { every:13, type:'energy',   ch:2, ic:'🔌', name:'Генератор',
+  { type:'energy',   ch:2, ic:'🔌', name:'Генератор',
     desc:()=>'Тап: +' + specialEnergy() + ' энергии' },
-  { every:17, type:'gems',     ch:1, ic:'💎', name:'Копилка',
+  { type:'gems',     ch:1, ic:'💎', name:'Копилка',
     desc:()=>'Тап: +' + C.SPECIAL_GEMS + (C.SPECIAL_GEMS === 1 ? ' алмаз' : ' алмазов') },
-  { every:23, type:'chest',    ch:1, ic:'📦', name:'Посылочный',
+  { type:'chest',    ch:1, ic:'📦', name:'Посылочный',
     desc:()=>'Тап: бесплатная посылка' },
 ];
-function specialOf(l){
-  for(const sp of SPECIALS) if(l >= sp.every && l % sp.every === 0) return sp;
+/* Заряд теперь не привязан к виду предмета. Любая вещь с вероятностью
+   SPECIAL_CHANCE приходит заряженной, тип берётся случайно из списка выше.
+   Зарядов тем больше, чем выше уровень: базовые плюс один за каждые
+   SPECIAL_CH_STEP уровней. Тип хранится в самом предмете (поле sp),
+   поэтому две одинаковые вещи могут быть разными: одна Копилка, другая пустая. */
+/* Прежнее правило: тип выводился из кратности уровня. Оставлено только для
+   переноса старых сохранений — новые предметы получают тип случайно. */
+function oldSpecialIdx(l){
+  const by = { 25:0, 10:1, 13:2, 17:3, 23:4 };
+  for(const every of [25, 10, 13, 17, 23])
+    if(l >= every && l % every === 0) return by[every];
   return null;
+}
+function specialOf(it){
+  if(!it || it.sp == null) return null;
+  return SPECIALS[it.sp] || null;
+}
+/* Надбавка к зарядам от уровня вещи. Сначала быстро — плюс один за каждые
+   SPECIAL_CH_STEP уровней, но не больше SPECIAL_CH_MAX. Этот потолок набирается
+   к 50-му уровню, дальше рост замедляется: плюс один за каждые SPECIAL_CH_SLOW.
+   Так на 50-м +5, на 100-м +6, на 200-м +8, на 500-м +14. */
+function chargeBonus(l){
+  const fast = Math.min(C.SPECIAL_CH_MAX, Math.floor(l / C.SPECIAL_CH_STEP));
+  const slow = Math.max(0, Math.floor((l - C.SPECIAL_CH_MAX*C.SPECIAL_CH_STEP) / C.SPECIAL_CH_SLOW));
+  return fast + slow;
+}
+// что навесить на только что созданный предмет: {sp, ch} либо пусто
+function rollSpecial(l){
+  if(Math.random() >= C.SPECIAL_CHANCE) return { sp:null, ch:null };
+  const i = (Math.random() * SPECIALS.length) | 0;
+  return { sp:i, ch: SPECIALS[i].ch + chargeBonus(l) };
 }
 /* Цена сброса банкомата: базовая плюс 1 за каждые TAP_COST_STEP уровней игрока.
    На 1–4 уровне — 2, на 5-м — 3, на 20-м — 6. Бак тоже растёт с уровнем,
    так что сбросов меньше не становится, но каждый весит дороже. */
 function tapCost(){ return C.ENERGY_TAP_COST + Math.floor(S.level / C.TAP_COST_STEP); }
-function chargesFor(l){ const sp = specialOf(l); return sp ? sp.ch : null; }
+
 
 /* ============ ЛЕСТНИЦА 50 УРОВНЕЙ ИГРОКА ============ */
 // Множитель награды: каждые LVL_REWARD_STEP уровней +50%, потолок ×10 (на 90-м уровне)
@@ -1109,7 +1149,7 @@ function spawn(l, at){
   l = clamp(l, 1, C.MAX_LVL);
   const i = (at != null && !S.board[at]) ? at : firstEmpty();
   if(i < 0){ toast('Класть некуда'); return -1; }
-  S.board[i] = { l, ch: chargesFor(l) };
+  S.board[i] = Object.assign({ l }, rollSpecial(l));
   if(l > S.seen) S.seen = l;
   return i;
 }
@@ -1147,7 +1187,7 @@ function tryMerge(from,to,quiet){
   if(a.l >= C.MAX_LVL){ if(!quiet) toast('Выше некуда'); return false; }   // упираемся только в технический потолок
   const nl = a.l + 1;
   S.board[from] = null;
-  S.board[to] = { l:nl, ch:chargesFor(nl) };
+  S.board[to] = Object.assign({ l:nl }, rollSpecial(nl));
   if(nl > S.seen){ S.seen = nl; if(!quiet) toast('Открыл: ' + nameOf(nl)); }
   // Перевалили за сотый — начался новый виток цепочки
   if(galaxyOf(nl) > (S.galaxySeen|0)){
@@ -1239,7 +1279,11 @@ function checkLevelUp(){
 /* ============ ЗАКАЗЫ ============ */
 function makeOrder(){
   const lo = clamp(genMin() + 1, 2, C.MAX_LVL);
-  const hi = clamp(S.seen + 1, lo, C.MAX_LVL);
+  /* Потолок заказа — минимальный сброс банкомата плюс ORDER_LVL_SPREAD.
+     Раньше он тянулся до самого высокого виденного уровня, и на поле прилетали
+     заказы на вещь, до которой домерживаться полдня. Заодно не просим того,
+     чего игрок ещё не открыл: ограничиваем и увиденным. */
+  const hi = clamp(Math.min(S.seen + 1, genMin() + C.ORDER_LVL_SPREAD), lo, C.MAX_LVL);
   const l = rndInt(lo, hi);
   return { l, coins:price(l)*C.ORDER_COIN_MULT, xp:orderXp(l),
            chest: Math.random() < C.ORDER_CHEST_CHANCE,
@@ -1821,7 +1865,7 @@ function galaxySheet(g){
 }
 function itemSheet(i){
   const it = S.board[i]; if(!it) return;
-  const rar = rarOf(it.l), sp = specialOf(it.l);
+  const rar = rarOf(it.l), sp = specialOf(it);
   const next = it.l < C.MAX_LVL ? (emo(it.l+1) + ' ' + nameOf(it.l+1)) : 'дальше некуда, это технический потолок';
   openSheet('<div class="bigem">' + emo(it.l) + '</div><h3 class="sh-h">' + nameOf(it.l) + '</h3>' +
     '<p class="sh-p">Уровень ' + it.l + ' · виток ' + roman(galaxyOf(it.l)) +
@@ -1912,9 +1956,9 @@ function renderBoard(){
     const it = S.board[i], cur = cell.firstChild;
     if(!it){ if(cur) cell.innerHTML = ''; continue; }
     const rar = rarOf(it.l);
-    const sig = it.l + ':' + (it.ch == null ? '-' : it.ch);   // значок типа и виток выводятся из уровня
+    const sig = it.l + ':' + (it.ch == null ? '-' : it.ch) + ':' + (it.sp == null ? '-' : it.sp);
     if(cur && cur.dataset && cur.dataset.sig === sig) continue;
-    const sp = specialOf(it.l), gx = galaxyOf(it.l);
+    const sp = specialOf(it), gx = galaxyOf(it.l);
     cell.innerHTML = '<div class="item r' + (rar+1) + (sp ? ' special' : '') + (gx > 1 ? ' galaxy' : '') + '" data-sig="' + sig +
       '" style="--rc:var(' + RAR_VAR[rar] + ');--lc:' + lvlHue(it.l) + ';' + lvlBg(it.l) + '">' +
       '<span class="em">' + emo(it.l) + '</span><span class="lv">' + it.l + '</span>' +
@@ -2288,8 +2332,11 @@ function helpSheet(){
       'За них берут энергию, бусты, магниты, посылки и Золотую карту. За звёзды покупаются только алмазы.') +
     legalRow('🧲','Магнит слипает всё поле. Заряд даётся за каждые ' + C.MAGNET_PER_MERGES +
       ' слияний руками, без заряда — ожидание ' + C.MERGE_ALL_CD_MIN + ' минут. Пачку можно купить за алмазы.') +
-    legalRow('🏭','Особые предметы с зарядами: Станок 🏭 выдаёт вещь попроще, Генератор 🔌 даёт энергию, ' +
-      'Копилка 💎 алмазы, Посылочный 📦 посылку. Тапай по ним.') +
+    legalRow('🏭','Любая вещь может прийти заряженной — шанс ' + Math.round(C.SPECIAL_CHANCE*100) +
+      '%, вид заряда случайный: Касса 🏦 даёт монеты, Станок 🏭 выдаёт вещь попроще, ' +
+      'Генератор 🔌 энергию, Копилка 💎 алмаз, Посылочный 📦 посылку. Тапай по таким. ' +
+      'Чем выше уровень вещи, тем больше зарядов: плюс один за каждые ' + C.SPECIAL_CH_STEP +
+      ' уровней до +' + C.SPECIAL_CH_MAX + ', дальше плюс один за каждые ' + C.SPECIAL_CH_SLOW + '.') +
     legalRow('🎁','В магазине бывает раздел «Пока дают»: ограниченные наборы за алмазы. ' +
       'Новый приходит каждые ' + C.OFFER_EVERY_MIN + ' минут и на каждый ' + C.OFFER_ON_LEVEL_EVERY +
       '-й уровень, больше ' + C.OFFER_MAX + ' сразу не висит. У каждого свой таймер — не успел, исчезает.') +
@@ -2394,7 +2441,7 @@ $('#board').addEventListener('pointercancel', ()=>{
 });
 function tapCell(i){
   const it = S.board[i]; if(!it) return;
-  const sp = specialOf(it.l);
+  const sp = specialOf(it);
   if(sp && it.ch != null && it.ch > 0){
     if(sp.type === 'producer'){
       if(countFree() <= 0){ toast('Класть некуда'); SFX.err(); haptic('err'); return; }
