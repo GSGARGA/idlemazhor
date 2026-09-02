@@ -370,7 +370,7 @@ h2.sec:first-child{margin-top:0}
       <div id="tiers">
         <button class="tier t0" data-tier="0"><span class="te">🕴️</span><span class="tn">ОЛИГАРХ</span><span class="dot"></span></button>
         <button class="tier t1" data-tier="1"><span class="te">👑</span><span class="tn">ПРЕСТИЖ</span><span class="dot"></span></button>
-        <button class="tier t2" data-tier="2"><span class="te">💠</span><span class="tn">СУПЕР</span><span class="dot"></span></button>
+        <button class="tier t2" data-tier="2"><span class="te">💠</span><span class="tn">ЗВЕЗДА</span><span class="dot"></span></button>
       </div>
       <div id="dock">
         <button id="gen">
@@ -411,7 +411,7 @@ h2.sec:first-child{margin-top:0}
 
 /* ============ БЛОК КОНСТАНТ (весь баланс здесь) ============ */
 const C = {
-  SAVE_VERSION:      22,      // версия сейва; при росте запускается migrate()
+  SAVE_VERSION:      24,      // версия сейва; при росте запускается migrate()
   SAVE_KEY:          'bvs_save',
   SAVE_DEBOUNCE_MS:  700,    // задержка перед записью сейва
 
@@ -479,6 +479,9 @@ const C = {
   ORDER_GEM_CHANCE:  0.14,   // шанс алмазов в награду
   ORDER_GEMS:        [3,8],  // сколько алмазов может дать заказ
   ORDER_LVL_SPREAD:  10,     // насколько выше минимального сброса бывает заказ
+  QUEST_REACH_SPREAD: 13,    // насколько выше сброса бывает цель задания «собери предмет»
+  QUEST_HAND:        [7,15], // сколько ручных слияний просит задание
+  QUEST_SELL:        8,      // сколько предметов просит продать задание
   REROLL_FREE_DAY:   1,      // бесплатных смен всех заказов в день
   REROLL_GEMS:       20,     // цена смены заказов сверх лимита
 
@@ -502,14 +505,17 @@ const C = {
   COINS_2_MIN:       5000,   // но не меньше этого
   // Всё остальное монетное тоже считается от баланса, иначе на поздней игре
   // тысячи монет превращаются в мусор
-  CHEST_PRICE_PCT:   0.30,   // цена посылки за монеты — доля баланса
+  CHEST_PRICE_PCT:   0.10,   // цена посылки за монеты — доля баланса
+  CHEST_COIN_PER_HOUR: 5,    // сколько посылок за монеты можно взять в час
+  CHEST_COIN_RESET_GEMS: 50, // цена сброса часового лимита, алмазов
   CHEST_COIN_PCT:    [0.05, 0.20],  // монеты из обычной и редкой посылки — доля баланса
   OFFER_STARTER_PCT: 2,      // «Подъёмные» дают столько балансов монет
   OFFER_WEEKEND_PCT: 5,      // «Загул» — столько балансов монет
 
   CHEST_COIN_PRICE:  2500,   // нижняя цена посылки за монеты, если кошелёк тощий
   CHEST_GEMS:        [[0,0],[15,25],[35,55],[75,110],[150,225]], // алмазы из посылки по редкости
-  CHEST_COIN_GEM_MAX: 10,    // потолок алмазов из посылки, купленной за монеты
+  CHEST_COIN_GEMS:   [3,4,5,7,8], // алмазы из посылки за монеты по редкостям
+  CHEST_COIN_GEM_MAX: 15,    // общий потолок алмазов из посылки за монеты
   CHEST_ITEM_GEM_DIV: 3,     // во столько раз меньше алмазов из посылок с заряженных предметов
   PITY_PULLS:        12,     // вскрытий до гарантии редкого и выше
   ODDS:              [0.50,0.27,0.15,0.06,0.02], // шансы редкостей, ровно эти числа показываем
@@ -523,12 +529,15 @@ const C = {
   VIP_COUNT:         50,     // предметов в каждой витрине
   // Цены: от первой до последней внутри тира, диапазоны не пересекаются
   // Каждая граница — тира и круга — это шаг ×1.1, поэтому лестница ровная
+  VIP_GEMS:          10,     // алмазов за каждый выкупленный предмет витрины
+  VIP_ENERGY:        1,      // на сколько каждый выкупленный предмет поднимает бак
+  VIP_STEP_GEN:      25,     // сколько предметов витрины поднимают сброс банкомата на 1
   VIP_RANGE:         [[1e3, 1e6], [1.1e6, 1e8], [1.1e8, 1e10]],
-  // Круг престижа: выкупил Суперпрестиж — открывается следующий круг (II, III, ...)
+  // Круг престижа: выкупил Знаменитость — открывается следующий круг (II, III, ...)
   CYCLE_PRICE_MULT:  1.1e7,  // во сколько раз дороже все цены следующего круга
   CYCLE_PTS_MULT:    3,      // во сколько раз больше очков за предмет следующего круга
   LEAGUE_TOP_CYCLE:  3,      // по какому кругу считается верх таблицы лиги
-  VIP_TIER_PTS:      [1, 3, 10],     // множители очков лиги: Олигарх, Престиж, Суперпрестиж
+  VIP_TIER_PTS:      [1, 3, 10],     // множители очков лиги: Олигарх, Престиж, Знаменитость
   VIP_PTS_STEP:      5,      // очков за предмет = это * номер * множитель тира
   // Всего очков в игре: 6375 + 19125 + 63750 = 89 250
   LEAGUE_PRIZES:     [600,420,300,220,170,130,100,80,60,45], // алмазы за места 1-10
@@ -823,6 +832,8 @@ function fresh(){
     premiumUntil:0,
     pity:0, pulls:0, pendingChests:0,
     itemChests:0,          // посылки, добытые с заряженных предметов — считаются отдельно
+    vipEver:0,             // предметы витрин, выкупленные в закрытых кругах — бонусы не сгорают
+    chestHour:'', chestUsed:0,   // час и сколько посылок за монеты в нём уже взято
     magnets:0, mergeStreak:0,   // заряды магнита и счётчик ручных слияний до следующего
     coinCd:{},                  // до какого времени пакеты монет на кулдауне
     galaxySeen:1,               // до какого витка цепочки уже показывали поздравление
@@ -907,6 +918,9 @@ function migrate(raw){
   s.vip = s.vip.map(a=>Array.isArray(a) ? a.filter(n=>Number.isInteger(n) && n >= 0 && n < C.VIP_COUNT) : []);
   s.boughtApplied = Math.max(0, s.boughtApplied|0);   // v19 → v20: счётчик покупок за звёзды
   s.itemChests = Math.max(0, s.itemChests|0);        // v21 → v22: посылки с предметов отдельно
+  s.vipEver = Math.max(0, s.vipEver|0);              // v22 → v23: выкупленное в прошлых кругах
+  if(typeof s.chestHour !== 'string') s.chestHour = '';   // v23 → v24: часовой лимит посылок за монеты
+  s.chestUsed = Math.max(0, s.chestUsed|0);
   s.payPending = Math.max(0, +s.payPending || 0);
   if(typeof s.payPack !== 'string') s.payPack = '';
   s.magnets = Math.max(0, s.magnets|0);
@@ -1020,7 +1034,10 @@ function spendGems(n){
 /* ============ ПРОИЗВОДНЫЕ ============ */
 const isPremium = () => S.premiumUntil > Date.now();
 // Бак растёт с уровнем игрока: +ENERGY_PER_LEVEL за каждый
-const energyMax = () => Math.round((C.ENERGY_MAX + (S.level-1)*C.ENERGY_PER_LEVEL) *
+// Сколько предметов выкуплено во всех трёх витринах за текущий круг
+const vipCount = () => (S.vip||[]).reduce((n,a)=>n + (a ? a.length : 0), 0) + (S.vipEver|0);
+const energyMax = () => Math.round((C.ENERGY_MAX + (S.level-1)*C.ENERGY_PER_LEVEL
+    + vipCount()*C.VIP_ENERGY) *
   (isPremium() ? 1 + C.PREM_ENERGY_PCT : 1));
 // Все доливки считаются от текущего бака, поэтому не отстают от уровня
 const canEnergy     = () => Math.round(energyMax() * C.ENERGY_CAN_PCT);
@@ -1038,7 +1055,8 @@ const price = l => Math.round(C.SELL_BASE * Math.pow(C.SELL_POW, l-1) * RAR_COIN
 const mergeXp = l => Math.round(C.XP_PER_MERGE * RAR_XP[rarOf(l)] * Math.pow(C.GALAXY_XP_MULT, galaxyOf(l)-1) * xpMult());
 const orderXp = l => Math.round(C.XP_PER_ORDER_LVL * Math.sqrt(l) * RAR_XP[rarOf(l)] / 2 * xpMult());
 // Минимальный сброс банкомата: +1 уровень за каждые GEN_STEP_QUESTS заданий
-const genMin = () => clamp(1 + Math.floor(S.questsDone / C.GEN_STEP_QUESTS), 1, C.MAX_LVL - 2);
+const genMin = () => clamp(1 + Math.floor(S.questsDone / C.GEN_STEP_QUESTS)
+  + Math.floor(vipCount() / C.VIP_STEP_GEN), 1, C.MAX_LVL - 2);
 const questsToNextGen = () => C.GEN_STEP_QUESTS - (S.questsDone % C.GEN_STEP_QUESTS);
 const rowsMax = () => {
   let r = C.ROWS_START;
@@ -1148,11 +1166,15 @@ function spendEnergy(n){
 /* ============ ПОЛЕ ============ */
 function firstEmpty(){ for(let i=0;i<S.rows*C.BOARD_COLS;i++) if(!S.board[i]) return i; return -1; }
 function countFree(){ let n=0; for(let i=0;i<S.rows*C.BOARD_COLS;i++) if(!S.board[i]) n++; return n; }
+/* Задание «заполни всё поле». Проверяем после каждого нового предмета:
+   свободных клеток не осталось — цель достигнута. */
+function checkFull(){ if(countFree() === 0) quest('fill', 1); }
 function spawn(l, at){
   l = clamp(l, 1, C.MAX_LVL);
   const i = (at != null && !S.board[at]) ? at : firstEmpty();
   if(i < 0){ toast('Класть некуда'); return -1; }
   S.board[i] = Object.assign({ l }, rollSpecial(l));
+  checkFull();
   if(l > S.seen) S.seen = l;
   return i;
 }
@@ -1201,6 +1223,7 @@ function tryMerge(from,to,quiet){
   quest('merge', 1);
   quest('reach', nl);
   if(quiet) return true;
+  quest('hand', 1);                       // сюда доходят только слияния руками
   // Заряжаем магнит: только ручные слияния, иначе магнит заряжал бы сам себя
   S.mergeStreak = (S.mergeStreak|0) + 1;
   if(S.mergeStreak >= C.MAGNET_PER_MERGES){
@@ -1331,8 +1354,15 @@ const QUESTS = [
   { id:'merge', text:n=>'Сделай ' + n + ' слияний',        goal:()=>rndInt(25,50) },
   { id:'order', text:n=>'Сдай ' + n + ' заказов',          goal:()=>rndInt(3,6) },
   { id:'tap',   text:n=>'Тапни банкомат ' + n + ' раз',    goal:()=>rndInt(30,60) },
-  { id:'reach', text:n=>'Собери ' + nameOf(n) + ' ' + emo(n), goal:()=>clamp(S.seen+1, 4, C.MAX_LVL) },
+  /* Цель не выше сброса банкомата плюс QUEST_REACH_SPREAD: иначе задание
+     просит вещь, до которой мержиться полдня. Заодно не выше увиденного. */
+  { id:'reach', text:n=>'Собери ' + nameOf(n) + ' ' + emo(n),
+    goal:()=>clamp(Math.min(S.seen+1, genMin() + C.QUEST_REACH_SPREAD), 4, C.MAX_LVL) },
   { id:'coins', text:n=>'Заработай ' + fmt(n) + ' монет',  goal:()=>Math.max(4000, Math.round(price(S.seen)*4)) },
+  // Только слияния руками: магнит такие не засчитывает, иначе задание закрывалось бы одной кнопкой
+  { id:'hand',  text:n=>'Объедини вручную ' + n + ' раз',  goal:()=>rndInt(C.QUEST_HAND[0], C.QUEST_HAND[1]) },
+  { id:'fill',  text:()=>'Заполни всё поле',               goal:()=>1 },
+  { id:'sell',  text:n=>'Продай ' + n + ' любых предметов', goal:()=>C.QUEST_SELL },
 ];
 function rollQuests(){
   const pool = QUESTS.slice(), out = [];
@@ -1428,10 +1458,10 @@ function weeklyPayout(){
   save();
 }
 
-/* ============ ВИТРИНЫ: ОЛИГАРХ / ПРЕСТИЖ / СУПЕРПРЕСТИЖ ============
+/* ============ ВИТРИНЫ: ОЛИГАРХ / ПРЕСТИЖ / ЗНАМЕНИТОСТЬ ============
    Пятьдесят предметов в каждой, покупаются один раз за монеты.
    Каждый купленный навсегда добавляет очки в лигу. */
-const TIER_NAME = ['Олигарх','Престиж','Суперпрестиж'];
+const TIER_NAME = ['Олигарх','Престиж','Знаменитость'];
 const TIER_FRAME = ['чёрная рамка','золотая рамка','бриллиантовая рамка'];
 // Римская запись круга: I, II, III, IV, ... без потолка
 function roman(n){
@@ -1470,9 +1500,23 @@ function vipBuy(i,t){
   const p = vipPrice(i,t);
   if(S.coins < p){ toast('Не хватает ' + fmt(p - S.coins) + ' 🪙'); SFX.err(); haptic('err'); return; }
   S.coins -= p;
+  const wasMin = genMin();
   S.vip[t].push(i);
+  /* Каждый выкупленный предмет: алмазы, плюс к баку и шаг к росту сброса.
+     Бак и сброс считаются от числа выкупленного, отдельных полей не заводим. */
+  S.gems += C.VIP_GEMS;
   SFX.coin(); haptic('ok');
-  toast(nameOf(vipLvl(i)) + ' в состоянии · +' + fmt(vipPts(i,t)) + ' очков');
+  toast(nameOf(vipLvl(i)) + ' в состоянии · +' + fmt(vipPts(i,t)) + ' очков · +' +
+    C.VIP_GEMS + ' 💎 · +' + C.VIP_ENERGY + ' ⚡ к баку');
+  const nowMin = genMin();
+  if(nowMin > wasMin){
+    SFX.level(); haptic('ok');
+    openSheet('<div class="bigem">' + emo(nowMin) + '</div>' +
+      '<h3 class="sh-h">Банкомат подрос</h3>' +
+      '<p class="sh-p">Теперь он сбрасывает не ниже, чем <b style="color:var(' + RAR_VAR[rarOf(nowMin)] + ')">' +
+        nameOf(nowMin) + '</b> вместо ' + nameOf(wasMin) + '. Выкуплено предметов витрин: ' + vipCount() + '.</p>' +
+      '<div class="sh-row"><button class="btn gr" data-act="close">Отлично</button></div>');
+  }
   if(vipDone(t) && t < 2){
     SFX.level();
     openSheet('<div class="bigem">' + ['👑','💠'][t] + '</div>' +
@@ -1484,12 +1528,14 @@ function vipBuy(i,t){
   if(vipDone(2)) nextCycle();
   renderAll(); save();
 }
-// Весь Суперпрестиж выкуплен — начинается следующий круг: витрины пустеют,
+// Вся Знаменитость выкуплена — начинается следующий круг: витрины пустеют,
 // цены и очки растут, набранные очки уходят в банк и остаются навсегда.
 function nextCycle(){
   const closed = S.cycle;
   S.ptsBank += Math.round(cyclePtsTotal(closed));
   S.cycle++;
+  // витрины пустеют, но выкупленное запоминаем: бак и сброс от него не должны откатываться
+  S.vipEver = (S.vipEver|0) + S.vip.reduce((n,a)=>n + (a ? a.length : 0), 0);
   S.vip = [[],[],[]];
   SFX.level(); haptic('ok');
   setTimeout(()=>openSheet('<div class="bigem">♻️</div>' +
@@ -1611,9 +1657,15 @@ function rewardLine(rar, rw){
 function openChests(n, src){
   const got = []; let best = 0;
   for(let i=0;i<n;i++){
-    const rar = rollRarity(), rw = chestReward(rar);
+    const rar = rollRarity();
+    let rw = chestReward(rar);
+    // Обычная посылка за монеты платит алмазами, а не монетами: покупать её
+    // за монеты ради монет бессмысленно. Предмет, если он выпал, остаётся.
+    if(src === 'coins' && rw.kind === 'coins' && rar === 0)
+      rw = { kind:'gems', n:C.CHEST_COIN_GEMS[0], rar };
     if(rw.kind === 'gems'){
-      if(src === 'coins') rw.n = Math.min(rw.n, C.CHEST_COIN_GEM_MAX);
+      // за монеты алмазы фиксированные по редкости, а не доля от щедрой общей таблицы
+      if(src === 'coins') rw.n = Math.min(C.CHEST_COIN_GEMS[rar], C.CHEST_COIN_GEM_MAX);
       if(src === 'item')  rw.n = Math.max(1, Math.round(rw.n / C.CHEST_ITEM_GEM_DIV));
     }
     applyReward(rw); got.push({rar,rw});
@@ -1760,6 +1812,16 @@ const coinCdLeft = id => Math.max(0, (S.coinCd && S.coinCd[id] || 0) - Date.now(
 // Доля от текущего баланса, но не меньше нижнего порога
 const pctCoins = (mult, min) => Math.max(min, Math.round(Math.max(0,S.coins) * mult));
 const chestCoinPrice = () => pctCoins(C.CHEST_PRICE_PCT, C.CHEST_COIN_PRICE);
+/* Посылок за монеты — не больше CHEST_COIN_PER_HOUR в час. Счётчик привязан
+   к тому же часу, что и задания, и обнуляется сам при смене часа. */
+function chestCoinLeft(){
+  if(S.chestHour !== hourKey()) return C.CHEST_COIN_PER_HOUR;
+  return Math.max(0, C.CHEST_COIN_PER_HOUR - (S.chestUsed|0));
+}
+function chestCoinTake(){
+  if(S.chestHour !== hourKey()){ S.chestHour = hourKey(); S.chestUsed = 0; }
+  S.chestUsed++;
+}
 const starterCoins = () => pctCoins(C.OFFER_STARTER_PCT, 15000);
 const weekendCoins = () => pctCoins(C.OFFER_WEEKEND_PCT, 40000);
 
@@ -2092,14 +2154,20 @@ function renderChests(){
       '<button class="buy coins" data-act="chest-daily">Вскрыть</button>','prem');
 
   h += '<h2 class="sec">Взять ещё</h2>';
-  h += card('📦','Посылка за монеты','Стоит ' + (C.CHEST_PRICE_PCT*100) + '% кошелька — сейчас ' + fmt(chestCoinPrice()) +
-    ' 🪙. Алмазов из неё не больше ' + C.CHEST_COIN_GEM_MAX + '.',
-    '<button class="buy coins" data-act="chest-coins"' + (S.coins < chestCoinPrice() ? ' disabled' : '') + '>' + fmt(chestCoinPrice()) + ' 🪙</button>');
+  const left = chestCoinLeft();
+  h += card('📦','Посылка за монеты<span class="pill g">' + left + ' из ' + C.CHEST_COIN_PER_HOUR + '</span>',
+    'Стоит ' + (C.CHEST_PRICE_PCT*100) + '% кошелька — сейчас ' + fmt(chestCoinPrice()) +
+    ' 🪙. Алмазов: ' + C.CHEST_COIN_GEMS.join('/') + ' по редкости. ' +
+    (left > 0 ? 'В час их ' + C.CHEST_COIN_PER_HOUR + ', обновится через ' + mmss(nextHourAt() - Date.now()) + '.'
+              : 'На этот час всё, ждать ' + mmss(nextHourAt() - Date.now()) + ' — или обновить за алмазы.'),
+    left > 0
+      ? '<button class="buy coins" data-act="chest-coins"' + (S.coins < chestCoinPrice() ? ' disabled' : '') + '>' + fmt(chestCoinPrice()) + ' 🪙</button>'
+      : '<button class="buy gem" data-act="chest-reset">' + C.CHEST_COIN_RESET_GEMS + ' 💎</button>');
   h += card('🎁','Посылка','Одно вскрытие.', gemBtn('chest_1'));
   h += card('🚚','Фура посылок','Десять вскрытий, все награды покажем списком.', gemBtn('chest_10'));
 
   h += '<h2 class="sec">Что внутри</h2>';
-  h += '<div class="note">Редкость посылки и редкость предмета внутри — одна и та же. Обычная даёт предмет 1–20 уровня или ' + (C.CHEST_COIN_PCT[0]*100) + '% кошелька. Редкая — предмет 21–40 либо ' + (C.CHEST_COIN_PCT[1]*100) + '% кошелька. Эпическая — 41–60. Легендарная — 61–80 или сумасшедший банкомат. Мифическая — 81–100. Если до этой полосы ты ещё не дошёл, вместо предмета приходят алмазы: ' + C.CHEST_GEMS[1][0] + '–' + C.CHEST_GEMS[1][1] + ' за редкую, ' + C.CHEST_GEMS[2][0] + '–' + C.CHEST_GEMS[2][1] + ' за эпическую, ' + C.CHEST_GEMS[3][0] + '–' + C.CHEST_GEMS[3][1] + ' за легендарную, ' + C.CHEST_GEMS[4][0] + '–' + C.CHEST_GEMS[4][1] + ' за мифическую. Из посылки за монеты — не больше ' + C.CHEST_COIN_GEM_MAX + ', из посылки за предметы — втрое меньше. Если на поле нет места, вещь сразу продаётся, и это видно в списке.</div>';
+  h += '<div class="note">Редкость посылки и редкость предмета внутри — одна и та же. Обычная даёт предмет 1–20 уровня или ' + (C.CHEST_COIN_PCT[0]*100) + '% кошелька. Редкая — предмет 21–40 либо ' + (C.CHEST_COIN_PCT[1]*100) + '% кошелька. Эпическая — 41–60. Легендарная — 61–80 или сумасшедший банкомат. Мифическая — 81–100. Если до этой полосы ты ещё не дошёл, вместо предмета приходят алмазы: ' + C.CHEST_GEMS[1][0] + '–' + C.CHEST_GEMS[1][1] + ' за редкую, ' + C.CHEST_GEMS[2][0] + '–' + C.CHEST_GEMS[2][1] + ' за эпическую, ' + C.CHEST_GEMS[3][0] + '–' + C.CHEST_GEMS[3][1] + ' за легендарную, ' + C.CHEST_GEMS[4][0] + '–' + C.CHEST_GEMS[4][1] + ' за мифическую. Посылка за монеты: обычная всегда платит ' + C.CHEST_COIN_GEMS[0] + ' алмазами вместо монет, остальные — ' + C.CHEST_COIN_GEMS.slice(1).join(', ') + ' по редкости. Берётся не больше ' + C.CHEST_COIN_PER_HOUR + ' раз в час, обновление за ' + C.CHEST_COIN_RESET_GEMS + ' 💎. Из посылки за предметы алмазов втрое меньше обычного. Если на поле нет места, вещь сразу продаётся, и это видно в списке.</div>';
   $('#chestBody').innerHTML = h;
 }
 function renderTasks(){
@@ -2177,7 +2245,7 @@ function renderLeague(){
     '<div style="text-align:right;font-size:11px;color:var(--muted);font-weight:700;line-height:1.5">' +
     'приз за место<br><b style="color:var(--gem)">' + (prizeFor(me, di) || '—') + ' 💎</b></div></div>' +
     '<div class="track" style="margin-top:8px"><div class="fill xp" style="width:' + (got/inDiv*100) + '%"></div></div>' +
-    '<div class="note" style="margin-bottom:0">Очки дают только витрины Олигарх, Престиж и Суперпрестиж. ' +
+    '<div class="note" style="margin-bottom:0">Очки дают только витрины Олигарх, Престиж и Знаменитость. ' +
       'Слияния и заказы очков не приносят. Всего в игре ' + fmt(maxPts+1) + ' очков, у тебя ' + fmt(my) + '.</div></div>';
 
   h += '<h2 class="sec">Таблица дивизиона</h2>';
@@ -2254,7 +2322,7 @@ function renderVip(){
 }
 function renderTiers(){
   const rom = S.cycle > 1 ? ' ' + roman(S.cycle) : '';
-  const short = ['ОЛИГАРХ','ПРЕСТИЖ','СУПЕР'];
+  const short = ['ОЛИГАРХ','ПРЕСТИЖ','ЗВЕЗДА'];
   for(let t=0;t<3;t++){
     const btn = document.querySelector('.tier[data-tier="' + t + '"]');
     btn.querySelector('.tn').textContent = short[t] + rom;
@@ -2333,6 +2401,10 @@ function helpSheet(){
       ' в наборе, набор меняется каждый час, там же кнопка обновления. ' +
       'Сброс стоит <b>' + tapCost() + ' ⚡</b> и дорожает на единицу каждые ' + C.TAP_COST_STEP +
       ' уровней игрока — бак при этом тоже растёт.') +
+    legalRow('👑','Каждый выкупленный предмет витрин Олигарха, Престижа и Знаменитости даёт <b>+' +
+      C.VIP_GEMS + ' 💎</b> и <b>+' + C.VIP_ENERGY + ' ⚡</b> к баку навсегда. Каждые ' + C.VIP_STEP_GEN +
+      ' выкупленных предметов поднимают минимальный сброс банкомата на уровень — как задания. ' +
+      'Сейчас выкуплено: ' + vipCount() + '.') +
     legalRow('🪙','Монеты дают: <b>заказы</b> сверху — платят в ' + C.ORDER_COIN_MULT +
       ' раз больше цены предмета, это главный источник; <b>Касса</b> 🏦 на уровнях 25, 50, 75 и 100 — ' +
       'тап даёт вдвое больше продажи; продажа предмета тапом; посылки. В магазине есть ' +
@@ -2357,7 +2429,7 @@ function helpSheet(){
     legalRow('🌌','Слил две Корпорации №1 — цепочка идёт по новому витку: снова Цент, но 101 уровня. ' +
       'Названия повторяются, цена продолжает расти без сброса, опыт за слияние умножается на ' +
       C.GALAXY_XP_MULT + '. Виток отмечен римской цифрой на плитке.') +
-    legalRow('🕴️','Монеты копи на состояние под полем: Олигарх, затем Престиж, затем Суперпрестиж. ' +
+    legalRow('🕴️','Монеты копи на состояние под полем: Олигарх, затем Престиж, затем Знаменитость. ' +
       'Каждый выкупленный предмет добавляет очки в лигу — <b>больше очки взять неоткуда</b>.') +
     legalRow('♻️','Выкупишь все три витрины — начнётся <b>круг ' + roman(S.cycle+1) + '</b>: ' +
       'витрины обнулятся и откроются заново как Олигарх ' + roman(S.cycle+1) + ' и дальше. ' +
@@ -2512,14 +2584,23 @@ document.addEventListener('click', e=>{
     case 'gbuy': { const id = b.dataset.id; if(inSheet) $('#veil').classList.remove('on'); gemBuy(id); return; }
     case 'sell': {
       const i = +b.dataset.i, it = S.board[i];
-      if(it){ const p = price(it.l); S.coins += p; S.board[i] = null; quest('coins', p);
+      if(it){ const p = price(it.l); S.coins += p; S.board[i] = null;
+              quest('coins', p); quest('sell', 1);
               toast('Сбагрил за ' + fmt(p) + ' 🪙'); SFX.coin(); haptic('ok'); }
       closeSheet(); renderAll(); save(); return;
     }
     case 'chest-coins': {
       const p = chestCoinPrice();
       if(S.coins < p){ toast('Монет не хватает'); SFX.err(); return; }
-      S.coins -= p; openChests(1, 'coins'); return;
+      if(chestCoinLeft() <= 0){ toast('На этот час посылки кончились'); SFX.err(); haptic('err'); return; }
+      S.coins -= p; chestCoinTake(); openChests(1, 'coins'); return;
+    }
+    case 'chest-reset': {
+      if(chestCoinLeft() > 0) return;
+      if(!spendGems(C.CHEST_COIN_RESET_GEMS)) return;
+      S.chestHour = hourKey(); S.chestUsed = 0;
+      toast('Посылки за монеты снова доступны'); SFX.gem(); haptic('ok');
+      renderAll(); save(); return;
     }
     case 'chest-free': {
       const n = S.pendingChests; if(n <= 0) return;
