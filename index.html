@@ -405,6 +405,8 @@ const C = {
   APP_W:             360,    // базовая ширина раскладки, px (Galaxy A16: 1080/3)
   APP_H:             780,    // базовая высота раскладки, px (Galaxy A16: 2340/3)
   APP_MAX_W:         520,    // предел ширины на планшете и десктопе, px
+  PAY_WATCH_MIN:     5,      // сколько минут после оплаты игра сама доспрашивает сервер
+  PAY_WATCH_SEC:     3,      // как часто она это делает, с
   PAY_TRIES:         14,     // сколько раз переспросить сервер после оплаты
   PAY_WAIT_FAST:     600,    // пауза между первыми четырьмя попытками, мс
   PAY_WAIT_SLOW:     1500,   // пауза между остальными попытками, мс
@@ -612,8 +614,15 @@ const PAY = {
         body: JSON.stringify({ product: packId, initData:(tg && tg.initData) || '' })});
       const d = await r.json();
       if(!d.link) throw 0;
+      /* Метка «ждём платёж». Она лежит в сейве, поэтому переживает перезагрузку игры:
+         Telegram на некоторых клиентах перезапускает мини-апп после окна оплаты,
+         и колбэк ниже до конца не доживает. Метку разбирает watchPayment() в цикле. */
+      S.payPending = Date.now(); S.payPack = packId; saveNow();
       tg.openInvoice(d.link, async st=>{
-        if(st !== 'paid'){ toast(st === 'cancelled' ? 'Отменил' : 'Оплата не прошла'); return; }
+        if(st !== 'paid'){
+          S.payPending = 0; S.payPack = ''; save();
+          toast(st === 'cancelled' ? 'Отменил' : 'Оплата не прошла'); return;
+        }
         /* Звёзды списаны, но сервер узнаёт об этом отдельным письмом от Telegram,
            и оно приходит с задержкой в секунду-другую. Поэтому не спрашиваем один раз,
            а переспрашиваем, пока покупка не появится: сначала часто, потом реже. */
@@ -621,10 +630,7 @@ const PAY = {
         toast('Оплата прошла, зачисляем…');
         for(let i = 0; i < C.PAY_TRIES; i++){
           await pullServer();
-          if((S.boughtApplied|0) > was){
-            toast('+' + fmt(p.gems) + ' 💎'); SFX.gem(); haptic('ok');
-            return;
-          }
+          if((S.boughtApplied|0) > was) return;   // pullServer уже зачислил и показал окно
           await new Promise(r=>setTimeout(r, i < 4 ? C.PAY_WAIT_FAST : C.PAY_WAIT_SLOW));
         }
         toast('Платёж принят, алмазы вот-вот придут');
@@ -647,6 +653,9 @@ async function pullServer(){
       const diff = (d.bought|0) - (S.boughtApplied|0);
       if(diff > 0) S.gems += diff;
       S.boughtApplied = d.bought|0;
+      renderAll(); save();
+      // Ждали платёж и он пришёл — показываем окно прямо в игре, кто бы ни спросил сервер
+      if(diff > 0 && S.payPending){ payDone(diff); return; }
     }
     renderAll(); save();
   }catch(e){}
@@ -748,6 +757,8 @@ function fresh(){
     rows:C.ROWS_START,
     coins:0, gems:0,       // на старте пусто — и монеты, и алмазы зарабатываются
     boughtApplied:0,       // сколько купленных за звёзды алмазов уже зачислено в игру
+    payPending:0,          // время открытия счёта: пока стоит — игра доспрашивает сервер
+    payPack:'',            // какой пак оплачивается — чтобы окно после покупки назвало его
     level:1, xp:0, lvlTaken:1,
     energy:C.ENERGY_MAX, enTs:Date.now(),
     orders:[], orderCdUntil:0,
@@ -830,6 +841,8 @@ function migrate(raw){
   if(!Array.isArray(s.vip) || s.vip.length !== 3) s.vip = [[],[],[]];
   s.vip = s.vip.map(a=>Array.isArray(a) ? a.filter(n=>Number.isInteger(n) && n >= 0 && n < C.VIP_COUNT) : []);
   s.boughtApplied = Math.max(0, s.boughtApplied|0);   // v19 → v20: счётчик покупок за звёзды
+  s.payPending = Math.max(0, +s.payPending || 0);
+  if(typeof s.payPack !== 'string') s.payPack = '';
   s.magnets = Math.max(0, s.magnets|0);
   s.mergeStreak = clamp(s.mergeStreak|0, 0, C.MAGNET_PER_MERGES-1);
   if(!Array.isArray(s.orders)) s.orders = [];
@@ -848,6 +861,15 @@ function save(){
     try{ localStorage.setItem(C.SAVE_KEY, j); }catch(e){}
     try{ if(tg && tg.CloudStorage) tg.CloudStorage.setItem(C.SAVE_KEY, j, ()=>{}); }catch(e){}
   }, C.SAVE_DEBOUNCE_MS);
+}
+/* Записать сейв немедленно, без задержки. Нужно перед открытием окна оплаты:
+   Telegram может перезапустить мини-апп сразу, и отложенная запись не успеет. */
+function saveNow(){
+  clearTimeout(saveT);
+  S.savedAt = Date.now();
+  const j = JSON.stringify(S);
+  try{ localStorage.setItem(C.SAVE_KEY, j); }catch(e){}
+  try{ if(tg && tg.CloudStorage) tg.CloudStorage.setItem(C.SAVE_KEY, j, ()=>{}); }catch(e){}
 }
 function loadLocal(){
   try{ const r = localStorage.getItem(C.SAVE_KEY); if(r) S = migrate(JSON.parse(r)); }
@@ -2383,7 +2405,31 @@ document.addEventListener('click', e=>{
 });
 
 /* ============ ЦИКЛ ============ */
+/* Окно в самой игре сразу после зачисления. В бота ничего не пишем:
+   переписка с ботом уводит человека из игры. */
+function payDone(gems){
+  const p = PACKS.find(x=>x.id === S.payPack);
+  S.payPending = 0; S.payPack = ''; save();
+  SFX.gem(); haptic('ok'); renderAll();
+  openSheet('<div class="bigem">💎</div>' +
+    '<h3 class="sh-h">' + (p ? p.title + ' у тебя' : 'Алмазы зачислены') + '</h3>' +
+    '<p class="sh-p">На счёт упало <b>' + fmt(gems) + ' 💎</b>. Трать с умом — или не с умом, дело твоё.</p>' +
+    '<div class="sh-row"><button class="btn gr" data-act="close">Отлично</button></div>');
+}
+
+/* Пока в сейве стоит метка «ждём платёж», игра сама переспрашивает сервер
+   раз в PAY_WATCH_SEC секунд, не дольше PAY_WATCH_MIN минут. Это спасает случай,
+   когда после окна оплаты мини-апп перезапустился и колбэк openInvoice не отработал. */
+let payWatchAt = 0;
+async function watchPayment(){
+  if(!S.payPending || PAY.mode !== 'live' || !PAY.backend) return;
+  if(Date.now() - S.payPending > C.PAY_WATCH_MIN*60000){ S.payPending = 0; S.payPack = ''; save(); return; }
+  if(Date.now() - payWatchAt < C.PAY_WATCH_SEC*1000) return;
+  payWatchAt = Date.now();
+  await pullServer();
+}
 function loop(){
+  watchPayment();
   tickEnergy();
   const hadHour = S.hour;
   rollHour();
