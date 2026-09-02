@@ -177,8 +177,9 @@ main{flex:1;min-height:0;position:relative}
 .vip .vi{font-size:26px;width:34px;text-align:center;flex:0 0 auto}
 .vip .vb{flex:1;min-width:0}
 .vip .vt{font-weight:800;font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.vip .vd{font-size:11px;color:var(--muted);font-weight:700;margin-top:2px;
-  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.vip .vd{font-size:11px;color:var(--muted);font-weight:700;margin-top:2px;line-height:1.35}
+/* Строка наград переносится: в одну она не влезала и обрезалась многоточием */
+.vip .vd .rw{color:var(--gem)}
 .vip.owned{opacity:.55}
 .vip.owned .vt{color:var(--green)}
 .vipnum{font-family:var(--disp);font-weight:700;font-size:11px;color:var(--dim);width:22px;text-align:right;flex:0 0 auto}
@@ -2155,11 +2156,14 @@ function renderChests(){
 
   h += '<h2 class="sec">Взять ещё</h2>';
   const left = chestCoinLeft();
-  h += card('📦','Посылка за монеты<span class="pill g">' + left + ' из ' + C.CHEST_COIN_PER_HOUR + '</span>',
+  h += card('📦','Посылка за монеты<span class="pill ' + (left ? 'g' : '') + '">' +
+      left + ' из ' + C.CHEST_COIN_PER_HOUR + '</span>',
     'Стоит ' + (C.CHEST_PRICE_PCT*100) + '% кошелька — сейчас ' + fmt(chestCoinPrice()) +
-    ' 🪙. Алмазов: ' + C.CHEST_COIN_GEMS.join('/') + ' по редкости. ' +
-    (left > 0 ? 'В час их ' + C.CHEST_COIN_PER_HOUR + ', обновится через ' + mmss(nextHourAt() - Date.now()) + '.'
-              : 'На этот час всё, ждать ' + mmss(nextHourAt() - Date.now()) + ' — или обновить за алмазы.'),
+    ' 🪙. Алмазов: ' + C.CHEST_COIN_GEMS.join('/') + ' по редкости.<br>' +
+    (left > 0
+      ? 'Осталось <b>' + left + '</b> на этот час, счётчик обнулится через <b id="chestCd">' + mmss(nextHourAt() - Date.now()) + '</b>.'
+      : '<b style="color:var(--red)">На этот час всё.</b> Новые через <b id="chestCd">' +
+        mmss(nextHourAt() - Date.now()) + '</b> — или сбрось ожидание за ' + C.CHEST_COIN_RESET_GEMS + ' 💎.'),
     left > 0
       ? '<button class="buy coins" data-act="chest-coins"' + (S.coins < chestCoinPrice() ? ' disabled' : '') + '>' + fmt(chestCoinPrice()) + ' 🪙</button>'
       : '<button class="buy gem" data-act="chest-reset">' + C.CHEST_COIN_RESET_GEMS + ' 💎</button>');
@@ -2302,7 +2306,9 @@ function renderVip(){
     $('#vipBody').innerHTML = h;
     return;
   }
-  h += '<div class="note" style="margin:0 0 10px">Каждый предмет покупается один раз и даёт очки в лигу. ' +
+  h += '<div class="note" style="margin:0 0 10px">Каждый предмет покупается один раз и даёт очки в лигу, ' +
+    '<b>+' + C.VIP_GEMS + ' 💎</b> и <b>+' + C.VIP_ENERGY + ' ⚡ к баку навсегда</b>. Каждые ' +
+    C.VIP_STEP_GEN + ' выкупленных предметов поднимают сброс банкомата — сейчас выкуплено ' + vipCount() + '. ' +
     'Когда все три витрины выкуплены, начинается круг ' + roman(S.cycle+1) + ': <b>предметы витрин обнуляются</b> ' +
     'и открываются заново по ценам выше в ' + fmt(C.CYCLE_PRICE_MULT) + ' раз. ' +
     'Очки при этом не сгорают — они уходят в банк навсегда, сейчас там ' + fmt(S.ptsBank) + ' очков.</div>';
@@ -2312,7 +2318,8 @@ function renderVip(){
       '<span class="vipnum">' + (i+1) + '</span>' +
       '<div class="vi">' + emo(l) + '</div>' +
       '<div class="vb"><div class="vt">' + nameOf(l) + (have ? ' ✓' : '') + '</div>' +
-      '<div class="vd">+' + vipPts(i,t) + ' очков · ур. ' + l + '</div></div>' +
+      '<div class="vd">ур. ' + l + ' · +' + vipPts(i,t) + ' очков<br>' +
+        '<span class="rw">+' + C.VIP_GEMS + ' 💎 · +' + C.VIP_ENERGY + ' ⚡ к баку</span></div></div>' +
       (have ? '<button class="buy" disabled>куплено</button>'
             : '<button class="buy coins" data-act="vipbuy" data-i="' + i + '" data-t="' + t + '"' +
               (S.coins < p ? ' disabled' : '') + '>' + fmt(p) + ' 🪙</button>') +
@@ -2670,6 +2677,8 @@ function loop(){
   if(cur === 'shop' && (offersChanged || S.offers.length || S.starterUntil > Date.now()
       || S.drop2Until > Date.now() || coinCdLeft('coins_1') > 0 || coinCdLeft('coins_2') > 0)) renderShop();
   if(cur === 'league'){ const t = document.querySelector('#leagueBody .pt span:last-child'); if(t) t.textContent = mmss(endOfWeek()-Date.now()); }
+  // На вкладке посылок тикает счётчик часа: без этого таймер стоял бы на месте
+  if(cur === 'chest'){ const t = document.getElementById('chestCd'); if(t) t.textContent = mmss(nextHourAt() - Date.now()); }
   renderAlerts();
   const st = document.getElementById('stTimer');
   if(st) st.textContent = 'Предложение исчезнет через ' + mmss(S.starterUntil - Date.now());
