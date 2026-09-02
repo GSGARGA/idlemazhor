@@ -1,0 +1,2374 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0A0E13">
+<meta name="format-detection" content="telephone=no">
+<!-- SDK Telegram. Скрипт обязан идти ДО игрового кода: он создаёт window.Telegram.WebApp. -->
+<script src="https://telegram.org/js/telegram-web-app.js?63"></script>
+</head>
+<body>
+<title>МАЖОР</title>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700;900&family=Manrope:wght@400;600;800&display=swap">
+
+<style>
+/* ============ ОФОРМЛЕНИЕ ============
+   Одна тема: ночной обменник. Фон красим явно. */
+:root{
+  --bg:#0A0E13; --bg2:#101720; --panel:#16202B; --panel2:#1E2B39;
+  --line:#2A3B4D; --line2:#3A5068;
+  --ink:#E9F2F8; --muted:#8199AC; --dim:#5E7488;
+  --green:#4FC98A; --green-d:#2B7F55;
+  --gold:#FFCE3D; --red:#FF6B4A; --gem:#5BD5FF; --purple:#B06BFF;
+  --r1:#4FC98A; --r2:#4AA8FF; --r3:#B06BFF; --r4:#FFCE3D; --r5:#FF4D4D;
+  --disp:'Unbounded',system-ui,sans-serif;
+  --body:'Manrope',system-ui,-apple-system,sans-serif;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0;height:100%}
+body{
+  background:#05080B;color:var(--ink);font-family:var(--body);
+  overflow:hidden;overscroll-behavior:none;font-variant-numeric:tabular-nums;
+  display:flex;align-items:center;justify-content:center;
+}
+button{font:inherit;color:inherit;border:0;background:none;cursor:pointer}
+:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+
+/* Макет жёстко 360 × 780 — экран Galaxy A16 (1080×2340 при DPR 3) */
+#app{
+  width:360px;height:min(100dvh,780px);display:flex;flex-direction:column;overflow:hidden;
+  background:radial-gradient(120% 55% at 50% 0%, #14202C 0%, var(--bg) 62%);
+}
+
+/* ---------- ШАПКА (фикс 74) ---------- */
+#hud{flex:0 0 74px;height:74px;padding:8px 10px 5px;display:flex;flex-direction:column;gap:5px}
+.hud-top{display:grid;grid-template-columns:52px 1fr 1fr 28px;gap:5px;align-items:center;height:28px}
+.stat{display:flex;align-items:center;justify-content:center;gap:5px;background:var(--panel);
+  border:1px solid var(--line);border-radius:999px;padding:0 8px;height:28px;
+  font-weight:800;font-size:13.5px;line-height:1;overflow:hidden;white-space:nowrap}
+#hGemBtn{border-color:var(--gem);color:var(--gem)}
+.lvlchip{font-family:var(--disp);font-weight:700;font-size:11.5px;
+  background:linear-gradient(180deg,var(--green),var(--green-d));
+  color:#04120B;border-radius:999px;height:28px;display:flex;align-items:center;justify-content:center}
+#hSnd{background:var(--panel);border:1px solid var(--line);border-radius:999px;height:28px;
+  width:28px;display:flex;align-items:center;justify-content:center;font-size:13px}
+#hSnd.off{opacity:.45}
+.bars{display:flex;gap:5px;height:36px}
+.bar{flex:1;background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:4px 8px;overflow:hidden}
+.bar .lab{display:flex;justify-content:space-between;font-size:9.5px;color:var(--muted);
+  letter-spacing:.05em;text-transform:uppercase;font-weight:800;margin-bottom:3px;
+  white-space:nowrap;line-height:14px;height:14px}
+.bar .lab span:last-child{overflow:hidden;text-overflow:ellipsis}
+.track{height:6px;background:#0A1119;border-radius:99px;overflow:hidden}
+.fill{height:100%;width:0;border-radius:99px;transition:width .25s}
+.fill.en{background:linear-gradient(90deg,#FF9A3D,var(--gold))}
+.fill.xp{background:linear-gradient(90deg,var(--green-d),var(--green))}
+.fill.gm{background:linear-gradient(90deg,#2E86AD,var(--gem))}
+
+/* ---------- ЗАКАЗЫ (фикс 74) ---------- */
+#ordersRow{flex:0 0 74px;height:74px;padding:0 10px 5px;display:flex;gap:5px}
+#orders{flex:1;min-width:0;display:flex;gap:5px}
+.order{flex:1;min-width:0;background:var(--panel);border:1px solid var(--line);border-radius:13px;
+  padding:4px 3px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;
+  position:relative;overflow:hidden}
+.order.ready{border-color:var(--green);box-shadow:0 0 0 1px var(--green) inset}
+.order .em{font-size:24px;line-height:1}
+.order .nm{font-size:8.5px;color:var(--muted);font-weight:700;text-align:center;line-height:1.1;
+  max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.order .rw{font-size:10px;font-weight:800;color:var(--gold)}
+.order.empty{color:var(--dim);justify-content:center;font-size:10px;font-weight:700}
+.order .lvbadge{position:absolute;top:2px;right:4px;font-size:9px;font-weight:800;color:var(--dim)}
+#reroll{flex:0 0 44px;width:44px;background:var(--panel);border:1px solid var(--line);border-radius:13px;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px}
+#reroll .e{font-size:17px;line-height:1}
+#reroll .c{font-size:7.5px;font-weight:800;color:var(--gem);line-height:1.2}
+#reroll.free .c{color:var(--green)}
+
+/* ---------- ПОЛЕ ---------- */
+main{flex:1;min-height:0;position:relative}
+.screen{position:absolute;inset:0;display:none;flex-direction:column;min-height:0}
+.screen.on{display:flex}
+.scroll{overflow-y:auto;-webkit-overflow-scrolling:touch;padding:10px 10px 16px;flex:1}
+
+#boardWrap{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;padding:2px 10px}
+#board{--cell:60px;display:grid;
+  grid-template-columns:repeat(5,var(--cell));grid-template-rows:repeat(5,var(--cell));
+  gap:5px;touch-action:none;user-select:none;-webkit-user-select:none}
+.cell{background:#0E151D;border:1px solid #1B2836;border-radius:12px;
+  display:flex;align-items:center;justify-content:center;position:relative}
+.cell.locked{background:repeating-linear-gradient(45deg,#0C1219 0 6px,#0F1720 6px 12px);border-color:#16202B}
+.cell.locked::after{content:'🔒';font-size:13px;opacity:.35}
+.cell.over{border-color:var(--gold);box-shadow:0 0 0 2px rgba(255,206,61,.35) inset}
+.cell.hint{animation:hintp 1s ease-in-out 3}
+@keyframes hintp{0%,100%{box-shadow:0 0 0 0 rgba(79,201,138,0)}50%{box-shadow:0 0 0 3px rgba(79,201,138,.55) inset}}
+.item{width:100%;height:100%;border-radius:11px;display:flex;align-items:center;justify-content:center;
+  position:relative;background:linear-gradient(180deg,var(--panel2),var(--panel));
+  border:2px solid var(--rc,var(--r1));
+  box-shadow:0 3px 0 rgba(0,0,0,.4), 0 0 14px -7px var(--rc,var(--r1));
+  font-size:calc(var(--cell,60px) * .54);line-height:1}
+.item .lv{position:absolute;bottom:0;right:4px;font-size:calc(var(--cell,60px) * .2);font-weight:800;
+  color:var(--rc,var(--r1));font-family:var(--disp)}
+.item .ch{position:absolute;top:-3px;left:3px;font-size:10px;font-weight:800;color:var(--gold);
+  background:#0A0E13;border-radius:99px;padding:0 4px;border:1px solid var(--line)}
+.item .sp{position:absolute;top:-4px;right:-3px;font-size:12px;line-height:1;
+  background:#0A0E13;border-radius:99px;padding:1px 2px;border:1px solid var(--line2)}
+.item.special{box-shadow:0 3px 0 rgba(0,0,0,.4), 0 0 16px -5px var(--rc,var(--r1))}
+.item.galaxy{border-style:double;border-width:4px;
+  box-shadow:0 3px 0 rgba(0,0,0,.4), 0 0 18px -4px var(--rc,var(--r1)), inset 0 0 12px -6px #fff}
+.item .gx{position:absolute;top:-4px;left:-3px;font-family:var(--disp);font-weight:700;font-size:9px;
+  color:#0A0E13;background:var(--rc,var(--r1));border-radius:99px;padding:0 4px;line-height:14px}
+.item.dragging{opacity:.25}
+.item.pop{animation:pop .28s cubic-bezier(.2,1.6,.4,1)}
+@keyframes pop{0%{transform:scale(.4)}70%{transform:scale(1.15)}100%{transform:scale(1)}}
+#ghost{position:fixed;pointer-events:none;z-index:90;transform:translate(-50%,-50%) scale(1.12);
+  filter:drop-shadow(0 8px 12px rgba(0,0,0,.6));display:none}
+
+/* ---------- ДОК (фикс 64) ---------- */
+/* Три витрины на месте убранных рядов поля */
+#tiers{flex:0 0 74px;height:74px;padding:2px 10px 4px;display:flex;gap:7px}
+.tier{flex:1;min-width:0;border-radius:15px;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:2px;position:relative;overflow:hidden;
+  background:linear-gradient(180deg,#0C1016,#070A0E);border:2px solid #000;
+  box-shadow:0 0 0 1px #23303E, inset 0 1px 0 rgba(255,255,255,.05)}
+.tier .te{font-size:20px;line-height:1}
+.tier .tn{font-size:8px;font-weight:800;letter-spacing:.02em;color:var(--muted);white-space:nowrap}
+.tier .dot{position:absolute;top:6px;right:8px;width:8px;height:8px;border-radius:99px;
+  background:var(--red);display:none}
+.tier.alert .dot{display:block}
+.tier.t1{border-color:#D9A227;box-shadow:0 0 0 1px #6A4E10, 0 0 14px -6px #FFCE3D}
+.tier.t1 .tn{color:#FFCE3D}
+.tier.t2{border-color:#8FE6FF;box-shadow:0 0 0 1px #2E6C82, 0 0 16px -5px #8FE6FF}
+.tier.t2 .tn{color:#BFF3FF}
+.tier:disabled{opacity:.45}
+.tier .lock{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  font-size:18px;background:rgba(6,9,13,.72)}
+
+/* ---------- ВИТРИНА ---------- */
+.vip{background:linear-gradient(180deg,#0C1016,#070A0E);border:2px solid #000;
+  box-shadow:0 0 0 1px #23303E;border-radius:15px;padding:10px 11px;
+  display:flex;align-items:center;gap:10px;margin-bottom:7px}
+.vip.t1{border-color:#D9A227;box-shadow:0 0 0 1px #6A4E10, 0 0 14px -8px #FFCE3D}
+.vip.t2{border-color:#8FE6FF;box-shadow:0 0 0 1px #2E6C82, 0 0 16px -8px #8FE6FF}
+.vip .vi{font-size:26px;width:34px;text-align:center;flex:0 0 auto}
+.vip .vb{flex:1;min-width:0}
+.vip .vt{font-weight:800;font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.vip .vd{font-size:11px;color:var(--muted);font-weight:700;margin-top:2px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.vip.owned{opacity:.55}
+.vip.owned .vt{color:var(--green)}
+.vipnum{font-family:var(--disp);font-weight:700;font-size:11px;color:var(--dim);width:22px;text-align:right;flex:0 0 auto}
+
+#dock{flex:0 0 64px;height:64px;padding:5px 10px 4px;display:flex;gap:7px;align-items:stretch}
+#gen{flex:1 1 0;min-width:0;background:linear-gradient(180deg,#2A3B4D,#16202B);
+  border:1.5px solid var(--line2);border-radius:15px;padding:8px 11px;
+  display:flex;align-items:center;gap:9px;box-shadow:0 3px 0 #0A1119}
+#gen:active{transform:translateY(2px);box-shadow:0 1px 0 #0A1119}
+#gen.dead{opacity:.5}
+#gen .g-em{font-size:26px;line-height:1;flex:0 0 auto}
+#gen .g-txt{flex:1 1 0;min-width:0;text-align:left}
+#gen .g-t{font-family:var(--disp);font-weight:700;font-size:13.5px;display:block;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#gen .g-s{font-size:9.5px;color:var(--muted);font-weight:700;margin-top:1px;display:block;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sq{position:relative;width:54px;flex:0 0 54px;background:var(--panel);border:1px solid var(--line);
+  border-radius:15px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:0 2px}
+.sq:active{transform:translateY(2px)}
+.sq .e{font-size:19px}
+.sq .t{font-size:6.5px;color:var(--muted);font-weight:800;white-space:nowrap}
+.sq.hot{border-color:var(--green);box-shadow:0 0 10px -3px var(--green)}
+.sq.hot .t{color:var(--green)}
+.sq:disabled{opacity:.4}
+.sq.cooling .t{color:var(--red);font-size:9px}
+.sq.cooling .cnt{display:none}
+.sq.cooling .e{opacity:.4}
+.cnt{position:absolute;top:-6px;right:-4px;min-width:18px;height:18px;border-radius:99px;
+  background:var(--green);color:#04180E;font-size:10px;font-weight:800;line-height:18px;
+  border:2px solid var(--bg);display:none}
+.sq:not(:disabled) .cnt{display:block}
+.cnt.mag{background:var(--gold);color:#241A00}
+
+/* ---------- ТАБЫ (фикс 52) ---------- */
+#tabs{flex:0 0 auto;height:calc(52px + env(safe-area-inset-bottom));display:flex;
+  border-top:1px solid var(--line);background:var(--bg2);padding-bottom:env(safe-area-inset-bottom)}
+.tab{flex:1;height:52px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;
+  font-size:8px;font-weight:800;color:var(--dim);letter-spacing:.02em;position:relative}
+.tab .e{font-size:17px;line-height:1}
+.tab.on{color:var(--ink)}
+.tab.on::before{content:'';position:absolute;top:0;left:20%;right:20%;height:3px;
+  background:var(--green);border-radius:0 0 4px 4px}
+.tab .dot{position:absolute;top:5px;right:calc(50% - 15px);width:8px;height:8px;border-radius:99px;
+  background:var(--red);display:none}
+.tab.alert .dot{display:block}
+
+/* ---------- КАРТОЧКИ ---------- */
+h2.sec{font-family:var(--disp);font-weight:700;font-size:12px;letter-spacing:.08em;
+  text-transform:uppercase;color:var(--muted);margin:15px 0 8px}
+h2.sec:first-child{margin-top:0}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:15px;padding:11px 12px;
+  display:flex;align-items:center;gap:11px;margin-bottom:8px}
+.card .ci{font-size:27px;line-height:1;flex:0 0 auto;width:36px;text-align:center}
+.card .cb{flex:1;min-width:0}
+.card .ct{font-weight:800;font-size:14px}
+.card .cd{font-size:11.5px;color:var(--muted);font-weight:600;line-height:1.35;margin-top:2px}
+.buy{flex:0 0 auto;border-radius:12px;padding:9px 12px;font-weight:800;font-size:13px;white-space:nowrap;
+  background:linear-gradient(180deg,#3E5570,#28394D);border:1px solid var(--line2)}
+/* Раньше кнопки были заливные: жёлтая звезда терялась на жёлтом фоне,
+   голубой алмаз — на голубом. Теперь подложка тёмная, а цвет несут рамка,
+   текст и свечение — значок читается. */
+.buy.gem{background:linear-gradient(180deg,#0E2E3E,#07202C);color:#7FE6FF;
+  border:1.5px solid #35B6E8;box-shadow:0 0 12px -4px #35B6E8, inset 0 1px 0 rgba(127,230,255,.18)}
+.buy.stars{background:linear-gradient(180deg,#3A2E08,#241C04);color:#FFD95E;
+  border:1.5px solid #E5A800;box-shadow:0 0 12px -4px #E5A800, inset 0 1px 0 rgba(255,217,94,.18)}
+.buy.coins{background:linear-gradient(180deg,#0F2E20,#082016);color:#6FE3A8;
+  border:1.5px solid #34A46F;box-shadow:0 0 12px -4px #34A46F, inset 0 1px 0 rgba(111,227,168,.18)}
+.buy.danger{color:#FF9B7F}
+.buy:disabled{opacity:.4}
+.buy.danger{background:linear-gradient(180deg,#3A1208,#240B04);color:#FF9B7F;
+  border:1.5px solid #C4472A;box-shadow:0 0 12px -4px #C4472A}
+.card.hero{border-color:var(--gold);background:linear-gradient(160deg,#2A2415,var(--panel) 62%)}
+.card.gemhero{border-color:var(--gem);background:linear-gradient(160deg,#12303D,var(--panel) 62%)}
+.card.prem{border-color:var(--purple);background:linear-gradient(160deg,#241A33,var(--panel) 62%)}
+.card.done{opacity:.5}
+.pill{display:inline-block;font-size:9px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;
+  padding:2px 6px;border-radius:99px;border:1px solid currentColor;margin-left:6px;vertical-align:middle}
+.pill.g{color:var(--green)}.pill.o{color:var(--red)}.pill.p{color:var(--purple)}.pill.b{color:var(--gem)}
+.tagline{display:inline-block;font-size:9px;font-weight:800;letter-spacing:.05em;padding:2px 7px;
+  border-radius:99px;background:var(--red);color:#2A0A03;margin-left:6px;vertical-align:middle}
+
+/* ---------- ГАЧА ---------- */
+.pitybox{background:var(--panel);border:1px solid var(--line);border-radius:15px;padding:12px;margin-bottom:10px}
+.pitybox .pt{display:flex;justify-content:space-between;font-size:11px;font-weight:800;color:var(--muted);
+  text-transform:uppercase;letter-spacing:.06em;margin-bottom:7px}
+.odds{display:flex;flex-direction:column;gap:5px;margin-top:11px}
+.odd{display:flex;align-items:center;gap:8px;font-size:11.5px;font-weight:700}
+.odd .sw{width:10px;height:10px;border-radius:3px;flex:0 0 auto}
+.odd .on{flex:1;color:var(--muted)}
+.odd .ov{font-weight:800}
+/* Список наград после вскрытия пачки посылок */
+.loot{max-height:min(46vh,300px);overflow-y:auto;display:flex;flex-direction:column;gap:5px;margin:2px 0 4px;
+  padding-right:2px}
+.lootrow{display:flex;align-items:center;gap:9px;background:var(--panel);border-radius:11px;padding:7px 9px;
+  border-left:3px solid var(--lc)}
+.lootrow .li{font-size:20px;width:24px;text-align:center;flex:0 0 auto}
+.lootrow .lt{flex:1;min-width:0;font-size:12px;font-weight:800;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lootrow .lr{font-size:9.5px;font-weight:800;color:var(--lc)}
+
+/* ---------- ЛИГА ---------- */
+.lgrow{display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:11px;
+  background:var(--panel);border:1px solid var(--line);margin-bottom:5px}
+.lgrow.me{border-color:var(--green);background:linear-gradient(90deg,#12241B,var(--panel))}
+.lgrow .rk{font-family:var(--disp);font-weight:700;font-size:12px;width:26px;color:var(--muted)}
+.lgrow.top1 .rk{color:var(--gold)}.lgrow.top2 .rk{color:#C9D6E0}.lgrow.top3 .rk{color:#D9954A}
+.lgrow .nm{flex:1;font-weight:700;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lgrow .pts{font-weight:800;font-size:12px;color:var(--green)}
+.divbar{display:flex;gap:4px;margin-bottom:10px}
+.divbar .d{flex:1;text-align:center;font-size:9px;font-weight:800;padding:6px 2px;border-radius:9px;
+  background:var(--panel);border:1px solid var(--line);color:var(--dim)}
+.divbar .d.on{color:var(--ink);border-color:var(--gold);background:linear-gradient(180deg,#2A2415,var(--panel))}
+
+/* ---------- ЛЕСТНИЦА УРОВНЕЙ ---------- */
+.steps{display:flex;flex-direction:column;gap:5px}
+.step{display:flex;align-items:center;gap:10px;background:var(--panel);border:1px solid var(--line);
+  border-radius:12px;padding:8px 10px}
+.step.got{opacity:.45}
+.step.now{border-color:var(--green);box-shadow:0 0 0 1px var(--green) inset}
+.step .sl{font-family:var(--disp);font-weight:700;font-size:13px;width:34px;color:var(--muted)}
+.step.now .sl{color:var(--green)}
+.step .se{font-size:20px;width:26px;text-align:center}
+.step .st{flex:1;min-width:0;font-size:12px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* ---------- ЛИСТЫ ---------- */
+.veil{position:fixed;inset:0;background:rgba(4,7,10,.76);z-index:100;display:none;
+  align-items:center;justify-content:center;backdrop-filter:blur(3px)}
+.veil.on{display:flex}
+.sheet{position:relative;width:100%;max-width:336px;background:var(--bg2);border:1px solid var(--line2);
+  border-radius:20px;padding:18px 15px;animation:zin .22s ease;margin:0 12px}
+@keyframes zin{from{transform:scale(.92);opacity:0}}
+.sheet .x{position:absolute;top:8px;right:10px;width:30px;height:30px;border-radius:50%;
+  background:var(--panel);border:1px solid var(--line2);color:var(--muted);font-size:14px;
+  display:flex;align-items:center;justify-content:center;line-height:1}
+.sh-h{font-family:var(--disp);font-weight:700;font-size:17px;margin:0 22px 6px;text-align:center;text-wrap:balance}
+.sh-p{font-size:12.5px;color:var(--muted);font-weight:600;line-height:1.45;margin:0 0 12px;text-align:center}
+.bigem{font-size:46px;text-align:center;line-height:1;margin-bottom:6px}
+.sh-row{display:flex;gap:8px;margin-top:10px}
+.btn{flex:1;padding:12px;border-radius:13px;font-weight:800;font-size:13.5px;text-align:center;
+  background:var(--panel2);border:1px solid var(--line2)}
+.btn.pri{background:linear-gradient(180deg,#0E2E3E,#07202C);color:#7FE6FF;
+  border:1.5px solid #35B6E8;box-shadow:0 0 14px -4px #35B6E8}
+.btn.gold{background:linear-gradient(180deg,#3A2E08,#241C04);color:#FFD95E;
+  border:1.5px solid #E5A800;box-shadow:0 0 14px -4px #E5A800}
+.btn.gr{background:linear-gradient(180deg,#0F2E20,#082016);color:#6FE3A8;
+  border:1.5px solid #34A46F;box-shadow:0 0 14px -4px #34A46F}
+.timer{font-family:var(--disp);font-weight:700;font-size:13px;color:var(--red);text-align:center;margin-top:8px}
+
+#toasts{position:fixed;bottom:124px;left:0;right:0;z-index:120;display:flex;flex-direction:column-reverse;
+  align-items:center;gap:5px;pointer-events:none;max-width:360px;margin:0 auto;padding:0 10px}
+.toast{background:#0E1720;border:1px solid var(--line2);border-radius:99px;padding:7px 14px;
+  font-size:12px;font-weight:800;max-width:100%;text-align:center;line-height:1.3;animation:tin .25s ease}
+@keyframes tin{from{transform:translateY(-10px);opacity:0}}
+.fly{position:fixed;z-index:110;pointer-events:none;font-weight:900;font-family:var(--disp);font-size:15px;
+  animation:fly .95s ease-out forwards}
+@keyframes fly{to{transform:translate(-50%,-52px);opacity:0}}
+.note{font-size:10.5px;color:var(--dim);font-weight:600;line-height:1.5;
+  border-left:2px solid var(--line2);padding-left:9px;margin:10px 0 2px}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+
+<div id="app">
+  <header id="hud">
+    <div class="hud-top">
+      <span class="lvlchip" id="hLvl">УР 1</span>
+      <span class="stat">🪙 <b id="hCoins">0</b></span>
+      <button class="stat" id="hGemBtn">💎 <b id="hGems">0</b></button>
+      <button id="hSnd" aria-label="Звук">🔊</button>
+    </div>
+    <div class="bars">
+      <div class="bar">
+        <div class="lab"><span>Бак</span><span id="hEnT">полный</span></div>
+        <div class="track"><div class="fill en" id="fEn"></div></div>
+      </div>
+      <div class="bar">
+        <div class="lab"><span>Опыт</span><span id="hXpT">0/50</span></div>
+        <div class="track"><div class="fill xp" id="fXp"></div></div>
+      </div>
+    </div>
+  </header>
+
+  <div id="ordersRow">
+    <div id="orders"></div>
+    <button id="reroll"><span class="e">🔄</span><span class="c" id="rerollC">беспл</span></button>
+  </div>
+
+  <main>
+    <section class="screen on" id="scr-game">
+      <div id="boardWrap"><div id="board"></div></div>
+      <div id="tiers">
+        <button class="tier t0" data-tier="0"><span class="te">🕴️</span><span class="tn">ОЛИГАРХ</span><span class="dot"></span></button>
+        <button class="tier t1" data-tier="1"><span class="te">👑</span><span class="tn">ПРЕСТИЖ</span><span class="dot"></span></button>
+        <button class="tier t2" data-tier="2"><span class="te">💠</span><span class="tn">СУПЕР</span><span class="dot"></span></button>
+      </div>
+      <div id="dock">
+        <button id="gen">
+          <span class="g-em">🏧</span>
+          <span class="g-txt"><span class="g-t">Банкомат</span><span class="g-s" id="genSub">−2 ⚡ за тап</span></span>
+        </button>
+        <button class="sq" id="btnMergeAll"><span class="cnt" id="maCnt">0</span><span class="e">🧲</span><span class="t">МАГНИТ</span></button>
+        <button class="sq" id="btnHelp"><span class="e">💡</span><span class="t">ПОМОЩЬ</span></button>
+      </div>
+    </section>
+    <section class="screen" id="scr-task"><div class="scroll" id="taskBody"></div></section>
+    <section class="screen" id="scr-shop"><div class="scroll" id="shopBody"></div></section>
+    <section class="screen" id="scr-chest"><div class="scroll" id="chestBody"></div></section>
+    <section class="screen" id="scr-league"><div class="scroll" id="leagueBody"></div></section>
+    <section class="screen" id="scr-vip"><div class="scroll" id="vipBody"></div></section>
+  </main>
+
+  <nav id="tabs">
+    <button class="tab on" data-s="game"><span class="e">🎮</span>ПОЛЕ</button>
+    <button class="tab" data-s="task"><span class="e">📋</span>ЗАДАНИЯ<span class="dot"></span></button>
+    <button class="tab" data-s="shop"><span class="e">💎</span>АЛМАЗЫ<span class="dot"></span></button>
+    <button class="tab" data-s="chest"><span class="e">📦</span>ПОСЫЛКИ<span class="dot"></span></button>
+    <button class="tab" data-s="league"><span class="e">🏆</span>ЛИГА</button>
+  </nav>
+</div>
+
+<div id="ghost"></div>
+<div class="veil" id="veil"><div class="sheet" id="sheet"></div></div>
+<div id="toasts"></div>
+
+<script>
+"use strict";
+/* =====================================================================
+   БАКСЫ В САМОЛЁТЫ — мерж-2 для Telegram Mini App.
+   Валюты: монеты (мягкая, из игры) и алмазы (твёрдая, всё платное).
+   Звёзды тратятся ТОЛЬКО на паки алмазов — см. PACKS и PAY.
+   ===================================================================== */
+
+/* ============ БЛОК КОНСТАНТ (весь баланс здесь) ============ */
+const C = {
+  SAVE_VERSION:      19,      // версия сейва; при росте запускается migrate()
+  SAVE_KEY:          'bvs_save',
+  SAVE_DEBOUNCE_MS:  700,    // задержка перед записью сейва
+
+  APP_W:             360,    // ширина макета, px (Galaxy A16: 1080/3)
+  APP_H:             780,    // высота макета, px (Galaxy A16: 2340/3)
+  BOARD_COLS:        5,      // колонок на поле
+  BOARD_ROWS:        5,      // рядов на поле
+  ROWS_START:        5,      // открыто рядов на старте (всё поле сразу)
+  ROW_UNLOCK_LEVELS: [],     // рядов больше не добавляем: поле целиком открыто
+  CHAIN_LEN:         100,    // предметов в одном витке: от Цента до Корпорации №1
+  // Слияние двух Корпораций даёт Цент 101 уровня — начинается галактический
+  // престиж: те же предметы, но цена и опыт продолжают расти без сброса
+  MAX_LVL:           500,    // технический потолок — пять витков
+  // На стыке витков редкость сбрасывается с мифической на обычную, и без этих
+  // множителей цена и опыт проваливались бы вниз. Они компенсируют сброс с запасом.
+  GALAXY_COIN_MULT:  7,      // множитель цены за каждый следующий виток
+  GALAXY_XP_MULT:    60,     // множитель опыта за каждый следующий виток
+  MAX_PLAYER_LVL:    500,    // потолок уровня игрока
+  ENERGY_PER_LEVEL:  2,      // на сколько каждый уровень увеличивает бак
+  // Награды за уровень растут ступенями: каждые 5 уровней +50%, но не выше ×10
+  LVL_REWARD_STEP:   5,
+  LVL_REWARD_BONUS:  0.5,
+  LVL_REWARD_CAP:    10,
+
+  ENERGY_MAX:        100,    // стартовый максимум энергии
+  ENERGY_REGEN_SEC:  90,     // секунд на +1 энергии (без премиума)
+  ENERGY_TAP_COST:   2,      // энергии за тап по банкомату
+  ENERGY_CAN_PCT:    0.30,   // «Канистра» доливает эту долю бака
+  STARTER_ENERGY_PCT: 3,     // «Подъёмные» дают столько баков энергии
+  ENERGY_OFFLINE_CAP_H: 24,  // сколько часов офлайна копится энергия
+
+  // Минимальный сброс банкомата растёт за выполненные задания.
+  // Без этого 100 уровней недостижимы: 100-й — это 2^99 центов.
+  GEN_STEP_QUESTS:   2,      // сколько заданий поднимают сброс на 1 уровень
+  GEN_SPREAD:        1,      // насколько выше минимума может выпасть предмет
+  GEN_PLUS2_CHANCE:  0.12,   // шанс выдать ещё на уровень выше
+
+  PRODUCER_BACK:     6,      // на сколько уровней ниже станок выдаёт предмет
+  SPECIAL_ENERGY_PCT: 0.25,  // Генератор даёт эту долю бака
+  SPECIAL_GEMS:      8,      // сколько алмазов даёт Копилка за тап
+  SAFE_MULT:         2,      // во сколько раз Касса дороже обычной продажи
+
+  XP_BASE:           50,     // опыт для 2-го уровня игрока
+  XP_POW:            1.20,   // степень роста требований опыта
+  XP_PER_MERGE:      1,      // базовый опыт за мердж, множится на редкость
+  XP_PER_QUEST_BONUS: 0.10,  // каждое выполненное задание даёт +10% ко всему опыту
+  XP_PER_ORDER_LVL:  4,      // опыт за заказ = это * уровень, множится на редкость
+
+  ORDER_SLOTS:       3,      // слотов заказов
+  ORDER_SLOTS_PREM:  1,      // сколько добавляет Золотая карта
+  ORDER_REFRESH_SEC: 90,     // ожидание нового заказа после сдачи
+  ORDER_COIN_MULT:   30,     // монет за заказ = цена предмета * это
+  ORDER_CHEST_CHANCE:0.20,   // шанс посылки в награду
+  ORDER_GEM_CHANCE:  0.14,   // шанс алмазов в награду
+  ORDER_GEMS:        [3,8],  // сколько алмазов может дать заказ
+  REROLL_FREE_DAY:   1,      // бесплатных смен всех заказов в день
+  REROLL_GEMS:       20,     // цена смены заказов сверх лимита
+
+  SELL_BASE:         5,      // цена продажи предмета 1-го уровня
+  SELL_POW:          1.28,   // во сколько раз дороже каждый следующий уровень
+
+  MERGE_ALL_CD_MIN:  5,      // кулдаун «Магнита», когда зарядов нет
+  MAGNET_PER_MERGES: 5,      // столько ручных слияний заряжают один бесплатный магнит
+  MAGNET_PACK:       5,      // сколько магнитов в паке за алмазы
+  BOOST_DROP2_MIN:   10,     // минут действия «Банкомат сошёл с ума»
+
+  PREM_DAYS:         7,      // длительность Золотой карты в днях
+  PREM_ENERGY_PCT:   0.5,    // на сколько Золотая карта увеличивает бак (доля)
+  PREM_REGEN_MULT:   2,      // во сколько раз быстрее восстановление
+
+  // Пакеты монет считаются от текущего баланса и покупаются раз в час
+  COIN_BUY_CD_MIN:   60,     // кулдаун обоих пакетов монет, минут
+  COINS_1_MULT:      1,      // «Мелочь»: выдаёт столько же, сколько есть (баланс ×2)
+  COINS_1_MIN:       1000,   // но не меньше этого
+  COINS_2_MULT:      4,      // «Инкассаторский мешок»: выдаёт четыре баланса (баланс ×5)
+  COINS_2_MIN:       5000,   // но не меньше этого
+  // Всё остальное монетное тоже считается от баланса, иначе на поздней игре
+  // тысячи монет превращаются в мусор
+  CHEST_PRICE_PCT:   0.10,   // цена посылки за монеты — доля баланса
+  CHEST_COIN_PCT:    [0.05, 0.20],  // монеты из обычной и редкой посылки — доля баланса
+  OFFER_STARTER_PCT: 2,      // «Подъёмные» дают столько балансов монет
+  OFFER_WEEKEND_PCT: 5,      // «Загул» — столько балансов монет
+
+  CHEST_COIN_PRICE:  2500,   // цена посылки за монеты
+  PITY_PULLS:        12,     // вскрытий до гарантии редкого и выше
+  ODDS:              [0.50,0.27,0.15,0.06,0.02], // шансы редкостей, ровно эти числа показываем
+
+  QUEST_COUNT:       3,      // сколько заданий в наборе
+  QUEST_HOURS:       1,      // как часто набор заданий меняется, часов
+  QUEST_GEMS:        40,     // алмазов за выполненное задание
+  QUEST_REROLL_FREE: 1,      // бесплатных обновлений списка заданий в день
+  QUEST_REROLL_GEMS: 30,     // цена обновления заданий сверх лимита
+
+  VIP_COUNT:         50,     // предметов в каждой витрине
+  // Цены: от первой до последней внутри тира, диапазоны не пересекаются
+  // Каждая граница — тира и круга — это шаг ×1.1, поэтому лестница ровная
+  VIP_RANGE:         [[1e3, 1e6], [1.1e6, 1e8], [1.1e8, 1e10]],
+  // Круг престижа: выкупил Суперпрестиж — открывается следующий круг (II, III, ...)
+  CYCLE_PRICE_MULT:  1.1e7,  // во сколько раз дороже все цены следующего круга
+  CYCLE_PTS_MULT:    3,      // во сколько раз больше очков за предмет следующего круга
+  LEAGUE_TOP_CYCLE:  3,      // по какому кругу считается верх таблицы лиги
+  VIP_TIER_PTS:      [1, 3, 10],     // множители очков лиги: Олигарх, Престиж, Суперпрестиж
+  VIP_PTS_STEP:      5,      // очков за предмет = это * номер * множитель тира
+  // Всего очков в игре: 6375 + 19125 + 63750 = 89 250
+  LEAGUE_PRIZES:     [600,420,300,220,170,130,100,80,60,45], // алмазы за места 1-10
+  LEAGUE_DIV_MULT:   [1, 2, 4, 7, 12, 20],  // множитель приза по дивизиону
+  // Пороги дивизионов — доли от текущего потолка лиги, а не жёсткие числа
+  DIV_FRAC:          [0, 0.02, 0.0769, 0.15, 0.3077, 0.60],
+
+  LEAGUE_SIZE:       100,    // мест в таблице
+
+  // Ограниченные предложения: приходят по таймеру и на каждый 5-й уровень,
+  // висят в магазине не дольше своего срока, больше трёх сразу не бывает
+  OFFER_EVERY_MIN:     10,   // минут между появлениями
+  OFFER_ON_LEVEL_EVERY: 5,   // каждый N-й уровень игрока тоже приносит предложение
+  OFFER_MAX:           3,    // сколько предложений висит одновременно
+
+  OFFER_STARTER_GEMS:  90,   // цена «Подъёмных»
+  OFFER_STARTER_HOURS: 24,   // часов жизни оффера
+  OFFER_RESCUE_GEMS:   30,   // цена «Достать из-под полы»
+  OFFER_RESCUE_MAX_DAY:3,    // показов «добивки» в день
+  OFFER_RESCUE_CD_MIN: 30,   // минут между показами
+  OFFER_WEEKEND_GEMS:  225,  // цена «Загула на выходные»
+};
+
+/* ============ ОДНА ЦЕПОЧКА: 100 УРОВНЕЙ ОТ ЦЕНТА ДО КОРПОРАЦИИ ============ */
+const ITEMS = ("🪙 Цент|💵 Бакс|💴 Пятёрка|💶 Червонец|💷 Полтинник|🧧 Сотня|💸 Пачка|🧾 Чек|💰 Мешок денег|🏧 Банкомат|🧦 Носки|🧢 Кепка|👕 Футболка|👖 Джинсы|👟 Кроссовки|🎒 Рюкзак|🧥 Куртка|👞 Туфли|👜 Сумка|⌚ Часы|🔌 Зарядка|🎧 Наушники|📻 Радио|📷 Фотоаппарат|📱 Смартфон|💻 Ноутбук|🖥️ Компьютер|📺 Телевизор|🎮 Приставка|🥽 VR-шлем|🛹 Скейт|🛴 Самокат|🚲 Велосипед|🏍️ Мотоцикл|🚗 Машина|🚙 Внедорожник|🏎️ Спорткар|🚐 Лимузин|🚁 Вертолёт|✈️ Самолёт|⛺ Палатка|🛖 Хижина|🏚️ Дача|🏠 Дом|🏡 Особняк|🏘️ Таунхаус|🏢 Многоэтажка|🏬 Торговый центр|🏨 Отель|🏰 Замок|🛒 Ларёк|🏪 Минимаркет|🍕 Пиццерия|☕ Кофейня|🍔 Бургерная|🍣 Суши-бар|🍽️ Ресторан|🎂 Кондитерская|🍻 Пивоварня|🏭 Цех|🚚 Грузовик|🚛 Автопарк|📦 Склад|🏗️ Стройка|🧱 Кирпичный завод|⚙️ Машзавод|🔧 Ремзавод|🛠️ Верфь|⛽ Заправка|🛢️ Нефтебаза|🏦 Банк|💳 Платёжка|📈 Биржа|💹 Фонд|🏛️ Инвестбанк|🗄️ Реестр|📊 Рейтинг-агентство|💼 Холдинг|🤝 Синдикат|🏙️ Деловой квартал|🖨️ Типография|📡 Телеком|🛰️ Спутник-оператор|🗼 Телебашня|🔬 Лаборатория|🧬 Биотех|🤖 Робототехника|🧠 ИИ-корпорация|⚛️ Энергогигант|🔋 Батарейный трест|🚀 Космофирма|🛸 Орбитальный завод|🌐 Глобальная сеть|🌆 Мегаполис|🗽 Империя|🌍 Мировой холдинг|🌌 Галактический трест|👑 Корона рынка|💎 Алмазный фонд|🏆 Корпорация №1").split('|').map(s=>{ const i = s.indexOf(' '); return [s.slice(0,i), s.slice(i+1)]; });
+// Номер витка (галактики) и позиция внутри него
+const galaxyOf = l => Math.floor((clamp(l,1,C.MAX_LVL)-1) / C.CHAIN_LEN) + 1;
+const inChain  = l => (clamp(l,1,C.MAX_LVL)-1) % C.CHAIN_LEN;
+const emo    = l => ITEMS[inChain(l)][0];
+const baseName = l => ITEMS[inChain(l)][1];
+// За сотым уровнем к названию добавляется римский номер витка
+const nameOf = l => baseName(l) + (galaxyOf(l) > 1 ? ' ' + roman(galaxyOf(l)) : '');
+
+/* Пять редкостей по 20 уровней. Чем выше редкость, тем дороже предмет и тем
+   больше опыта даёт слияние. */
+const RARITY  = ['Обычный','Редкий','Эпический','Легендарный','Мифический'];
+const RAR_VAR = ['--r1','--r2','--r3','--r4','--r5'];
+const RAR_XP   = [1, 3, 8, 20, 50];      // множитель опыта за слияние
+const RAR_COIN = [1, 1.6, 2.6, 4, 6];    // множитель цены предмета
+const RAR_BAND = 20;                     // сколько уровней в одной редкости
+function rarOf(l){ return clamp(Math.floor(inChain(l)/RAR_BAND), 0, 4); }
+
+
+/* ============ ЧТО ПОКУПАЕТСЯ ЗА АЛМАЗЫ (цены вдвое ниже прежних) ============ */
+const GOODS = {
+  energy_full:  {gems:60,  ic:'⚡',  title:'Залить под пробку',    desc:'Бак энергии сразу полный'},
+  energy_30:    {gems:25,  ic:'🔋',  title:'Канистра',             desc:'30% бака, плещется даже сверх него'},
+  boost_drop2:  {gems:38,  ic:'🤑',  title:'Банкомат сошёл с ума', desc:'Две пачки за тап, 10 минут'},
+  coins_1:      {gems:35,  ic:'🪙',  title:'Мелочь по карманам',   desc:'Удваивает монеты, раз в час'},
+  coins_2:      {gems:100, ic:'💰',  title:'Инкассаторский мешок', desc:'Умножает монеты на пять, раз в час'},
+  magnets_10:   {gems:30,  ic:'🧲',  title:'Пять магнитов',        desc:'Работают без кулдауна, копятся'},
+  chest_1:      {gems:45,  ic:'🎁',  title:'Посылка',              desc:'Одно вскрытие, счётчик тикает'},
+  chest_10:     {gems:400, ic:'🚚',  title:'Фура посылок',         desc:'Десять вскрытий, на 11% дешевле'},
+  premium_week: {gems:450, ic:'👑',  title:'Золотая карта',        desc:'Неделя жизни мажора'},
+  offer_starter:{gems:C.OFFER_STARTER_GEMS, ic:'🧳', title:'Подъёмные',      desc:'Три бака энергии, удвоенный кошелёк и сумасшедший банкомат'},
+  offer_rescue: {gems:C.OFFER_RESCUE_GEMS,  ic:'🤝', title:'Достать из-под полы', desc:'Нужная вещь падает на поле'},
+  offer_weekend:{gems:C.OFFER_WEEKEND_GEMS, ic:'🎪', title:'Загул на выходные',   desc:'Полный бак, 3 посылки и кошелёк ×6'},
+};
+
+/* =====================================================================
+   ЮРИДИЧЕСКИЕ ТЕКСТЫ. Заполни четыре поля ниже перед публикацией:
+   Telegram в спорах и возвратах отсылает к условиям поставщика услуг,
+   то есть к твоим. Ссылки на эти же документы указываются в BotFather.
+   ===================================================================== */
+const LEGAL = {
+  name:    '[IDLE МАЖОР]',   // кто владеет игрой
+  email:   '[vertoprah02@gmail.com]',            // куда писать по вопросам и удалению данных
+  country: '[Греция]',         // право какой страны применяется
+  updated: '[02.09.2026]', // например 01.09.2026
+};
+
+/* ============ ПАКИ АЛМАЗОВ ЗА STARS ============
+   Единственное место, где тратятся звёзды. Выгода растёт с ценой. */
+const PACKS = [
+  { id:'gems_25',  stars:25,  gems:100,  em:'💠', title:'Горсть',   bonus:0  },
+  { id:'gems_50',  stars:50,  gems:220,  em:'💎', title:'Мешочек',  bonus:10 },
+  { id:'gems_100', stars:100, gems:500,  em:'📦', title:'Ящик',     bonus:25 },
+  { id:'gems_250', stars:250, gems:1400, em:'🧰', title:'Сундук',   bonus:40 },
+  { id:'gems_500', stars:500, gems:3200, em:'🏦', title:'Сейф',     bonus:60 },
+];
+
+/* =====================================================================
+   ПЛАТЕЖИ. Клиент не выставляет счета: ссылку делает бот через
+   createInvoiceLink, клиент открывает tg.openInvoice, зачисляет сервер.
+   mock — покупка тестовая, алмазы начисляются локально.
+   live — идём в бэкенд, начисляет сервер по вебхуку.
+   ===================================================================== */
+const PAY = {
+  mode: 'mock',
+  backend: '',
+  async buy(packId){
+    const p = PACKS.find(x=>x.id === packId);
+    if(!p) return;
+    if(this.mode === 'mock'){
+      const ok = await ask('Покупка понарошку',
+        p.title + ' — ' + p.gems + ' 💎 за ' + p.stars + ' ⭐\n\nБэкенда пока нет: звёзды не спишутся, алмазы дадим.',
+        'Забрать');
+      if(!ok) return;
+      addGems(p.gems, 'Купил ' + p.title.toLowerCase());
+      return;
+    }
+    try{
+      const r = await fetch(this.backend + '/api/invoice', { method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ product: packId, initData:(tg && tg.initData) || '' })});
+      const d = await r.json();
+      if(!d.link) throw 0;
+      tg.openInvoice(d.link, async st=>{
+        if(st === 'paid'){ await pullServer(); toast('Алмазы зачислены'); }
+        else toast(st === 'cancelled' ? 'Отменил' : 'Оплата не прошла');
+      });
+    }catch(e){ toast('Магазин недоступен'); }
+  }
+};
+async function pullServer(){
+  if(PAY.mode !== 'live' || !PAY.backend) return;
+  try{
+    const r = await fetch(PAY.backend + '/api/state', { method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ initData:(tg && tg.initData) || '' })});
+    const d = await r.json();
+    if(d.gems != null) S.gems = d.gems;   // алмазы — источник правды на сервере
+    renderAll(); save();
+  }catch(e){}
+}
+
+/* ============ TELEGRAM ============ */
+const tg = (window.Telegram && window.Telegram.WebApp) ? window.Telegram.WebApp : null;
+function haptic(t){
+  try{
+    if(!tg || !tg.HapticFeedback) return;
+    if(t === 'sel') tg.HapticFeedback.selectionChanged();
+    else if(t === 'ok') tg.HapticFeedback.notificationOccurred('success');
+    else if(t === 'err') tg.HapticFeedback.notificationOccurred('error');
+    else tg.HapticFeedback.impactOccurred(t || 'light');
+  }catch(e){}
+}
+if(tg){ try{
+  tg.ready(); tg.expand();
+  if(tg.setHeaderColor)            tg.setHeaderColor('#0A0E13');       // шапка в цвет игры
+  if(tg.setBackgroundColor)        tg.setBackgroundColor('#05080B');   // фон за макетом
+  if(tg.disableVerticalSwipes)     tg.disableVerticalSwipes();         // 7.7+: иначе перетаскивание сворачивает игру
+  if(tg.enableClosingConfirmation) tg.enableClosingConfirmation();     // 6.2+: спросить перед выходом
+  if(tg.onEvent) tg.onEvent('viewportChanged', ()=>{ try{ sizeBoard(); }catch(e){} });
+}catch(e){} }
+
+/* ============ ЗВУК: синтез на WebAudio, ни одного файла ============ */
+const SFX = {
+  ctx:null,
+  ready(){
+    if(!this.ctx){
+      const A = window.AudioContext || window.webkitAudioContext;
+      if(!A) return false;
+      try{ this.ctx = new A(); }catch(e){ return false; }
+    }
+    if(this.ctx.state === 'suspended'){ try{ this.ctx.resume(); }catch(e){} }
+    return true;
+  },
+  note(f,f2,d,type,v,delay){
+    if(S.sound === false || !this.ready()) return;
+    const t0 = this.ctx.currentTime + (delay||0);
+    const o = this.ctx.createOscillator(), g = this.ctx.createGain();
+    o.type = type||'sine'; o.frequency.setValueAtTime(f,t0);
+    if(f2) o.frequency.exponentialRampToValueAtTime(Math.max(20,f2), t0+d);
+    g.gain.setValueAtTime(0.0001,t0);
+    g.gain.exponentialRampToValueAtTime(v||0.1, t0+0.008);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0+d);
+    o.connect(g); g.connect(this.ctx.destination); o.start(t0); o.stop(t0+d+0.03);
+  },
+  tap(){    this.note(190,130,0.06,'square',0.05); },
+  merge(r){ const f = 260*Math.pow(1.22,r);
+            this.note(f,f*1.6,0.10,'triangle',0.11);
+            this.note(f*2,f*2.6,0.09,'sine',0.05,0.04); },
+  cascade(n){ const k = Math.min(n,10);
+            for(let i=0;i<k;i++) this.note(300*Math.pow(1.12,i),null,0.07,'triangle',0.07,i*0.045); },
+  coin(){   this.note(880,null,0.06,'square',0.07); this.note(1320,null,0.09,'square',0.06,0.05); },
+  gem(){    [660,880,1180].forEach((f,i)=>this.note(f,null,0.10,'square',0.07,i*0.05)); },
+  order(){  [523,659,784].forEach((f,i)=>this.note(f,null,0.13,'sine',0.10,i*0.06)); },
+  level(){  [523,659,784,1046].forEach((f,i)=>this.note(f,null,0.20,'triangle',0.11,i*0.09)); },
+  chest(r){ const b = [392,440,523,659,784][r];
+            for(let i=0;i<=r+1;i++) this.note(b*Math.pow(1.26,i),null,0.18,'sine',0.10,i*0.08); },
+  err(){    this.note(170,95,0.16,'sawtooth',0.07); },
+};
+document.addEventListener('pointerdown', ()=>SFX.ready(), {once:true});
+
+/* ============ СОСТОЯНИЕ ============ */
+const CELLS = C.BOARD_COLS * C.BOARD_ROWS;
+const SLOTS_MAX = C.ORDER_SLOTS + C.ORDER_SLOTS_PREM;   // слотов в разметке всегда столько
+function fresh(){
+  return {
+    v:C.SAVE_VERSION, savedAt:0,
+    board:new Array(CELLS).fill(null),  // {l:уровень, ch:заряды|null}
+    rows:C.ROWS_START,
+    coins:0, gems:0,       // на старте пусто — и монеты, и алмазы зарабатываются
+    level:1, xp:0, lvlTaken:1,
+    energy:C.ENERGY_MAX, enTs:Date.now(),
+    orders:[], orderCdUntil:0,
+    drop2Until:0, mergeAllUntil:0,
+    premiumUntil:0,
+    pity:0, pulls:0, pendingChests:0,
+    magnets:0, mergeStreak:0,   // заряды магнита и счётчик ручных слияний до следующего
+    coinCd:{},                  // до какого времени пакеты монет на кулдауне
+    galaxySeen:1,               // до какого витка цепочки уже показывали поздравление
+    cycle:1,                    // круг престижа: 1, 2, 3, ... без потолка
+    ptsBank:0,                  // очки лиги за полностью закрытые круги
+    vip:[[],[],[]],             // купленные предметы витрин текущего круга
+    seen:1,                 // максимальный собранный уровень
+    questsDone:0,           // всего выполненных заданий — от них растёт сброс банкомата
+    league:{week:0,seed:Math.floor(Math.random()*1e9),rank:null,div:0},
+    day:'', hour:'', rerollLeft:C.REROLL_FREE_DAY, questRerollLeft:C.QUEST_REROLL_FREE,
+    quests:[], dailyChestDay:'',
+    hadZeroEnergy:false, starterUntil:0, starterDone:false, weekendWeek:-1,
+    rescueDay:'', rescueCount:0, rescueCdUntil:0, rescueTarget:null,
+    offers:[], offerNextAt:0,     // живые предложения и время следующего
+    sound:true, tut:false,
+  };
+}
+let S = fresh();
+
+/* ============ МИГРАЦИЯ ============
+   v5 и раньше: девять цепочек по 12 уровней. Теперь одна на 100.
+   Старые предметы переводим по правилу «цепочка × 12 + уровень», чтобы
+   прогресс не обнулился, и режем по потолку. */
+function migrate(raw){
+  if(!raw || typeof raw !== 'object') return fresh();
+  let s = raw;
+  const f = fresh();
+  const oldV = s.v|0;
+  const oldLen = Array.isArray(s.board) ? s.board.length : 0;
+  if(oldLen !== CELLS || oldV < 6){
+    const keep = (Array.isArray(s.board) ? s.board : []).filter(x=>x && typeof x === 'object');
+    const nb = new Array(CELLS).fill(null);
+    let extra = 0;
+    for(let i=0;i<keep.length;i++){
+      const it = keep[i];
+      const lvl = (oldV < 6 && it.c != null)
+        ? clamp((it.c|0)*12 + (it.l|0), 1, C.MAX_LVL)   // из старой сетки цепочек
+        : clamp(it.l|0, 1, C.MAX_LVL);
+      if(i < CELLS) nb[i] = { l:lvl, ch:null };
+      else extra += 5 * Math.pow(1.28, lvl-1);
+    }
+    s.board = nb;
+    if(extra > 0) s.coins = (s.coins||0) + Math.round(extra);
+  }
+  if(oldV < 6){
+    // seen был объектом с уровнями по цепочкам — сводим в одно число
+    let m = 1;
+    if(s.seen && typeof s.seen === 'object'){
+      const ids = ['cash','wear','tech','food','ride','pets','home','fun','lux'];
+      for(let i=0;i<ids.length;i++){ const v = s.seen[ids[i]]|0; if(v) m = Math.max(m, i*12+v); }
+    } else if(typeof s.seen === 'number') m = s.seen;
+    s.seen = clamp(m, 1, C.MAX_LVL);
+    s.orders = [];              // формат заказов изменился
+    s.questsDone = s.questsDone|0;
+  }
+  for(const k in f) if(s[k] === undefined) s[k] = f[k];
+  s.board = s.board.map(it=>{
+    if(!it || typeof it !== 'object') return null;
+    const l = clamp(it.l|0, 1, C.MAX_LVL);
+    return { l, ch: it.ch == null ? null : it.ch|0 };
+  });
+  s.level = clamp(s.level|0 || 1, 1, C.MAX_PLAYER_LVL);
+  s.seen  = clamp(s.seen|0 || 1, 1, C.MAX_LVL);
+  s.gems  = Math.max(0, s.gems|0);
+  if(s.lvlTaken == null || s.lvlTaken < 1) s.lvlTaken = 1;
+  if(typeof s.hour !== 'string') s.hour = '';   // v9 → v10: задания стали почасовыми
+  if(!s.coinCd || typeof s.coinCd !== 'object') s.coinCd = {};   // v10 → v11: пакеты монет с кулдауном
+  delete s.dblLeft;                             // v13 → v14: «Ксерокс» убран из игры
+  s.galaxySeen = Math.max(1, s.galaxySeen|0 || 1);   // v14 → v15: витки цепочки
+  if(!Array.isArray(s.offers)) s.offers = [];        // v16 → v17: живые предложения
+  s.offerNextAt = s.offerNextAt|0;
+  s.cycle = Math.max(1, s.cycle|0 || 1);        // v11 → v12: круги престижа
+  s.ptsBank = Math.max(0, s.ptsBank|0);
+  if(!Array.isArray(s.vip) || s.vip.length !== 3) s.vip = [[],[],[]];
+  s.vip = s.vip.map(a=>Array.isArray(a) ? a.filter(n=>Number.isInteger(n) && n >= 0 && n < C.VIP_COUNT) : []);
+  s.magnets = Math.max(0, s.magnets|0);
+  s.mergeStreak = clamp(s.mergeStreak|0, 0, C.MAGNET_PER_MERGES-1);
+  if(!Array.isArray(s.orders)) s.orders = [];
+  s.orders = s.orders.filter(o=>o && typeof o.l === 'number');
+  s.v = C.SAVE_VERSION;
+  return s;
+}
+
+/* ============ СЕЙВ ============ */
+let saveT = null;
+function save(){
+  clearTimeout(saveT);
+  saveT = setTimeout(()=>{
+    S.savedAt = Date.now();
+    const j = JSON.stringify(S);
+    try{ localStorage.setItem(C.SAVE_KEY, j); }catch(e){}
+    try{ if(tg && tg.CloudStorage) tg.CloudStorage.setItem(C.SAVE_KEY, j, ()=>{}); }catch(e){}
+  }, C.SAVE_DEBOUNCE_MS);
+}
+function loadLocal(){
+  try{ const r = localStorage.getItem(C.SAVE_KEY); if(r) S = migrate(JSON.parse(r)); }
+  catch(e){ S = fresh(); }
+}
+function loadCloud(){
+  if(!tg || !tg.CloudStorage) return;
+  try{
+    tg.CloudStorage.getItem(C.SAVE_KEY, (err,val)=>{
+      if(err || !val) return;
+      try{
+        const c = migrate(JSON.parse(val));
+        if((c.savedAt||0) > (S.savedAt||0)){ S = c; applyOffline(); rollDay(); renderAll(); toast('Подтянул прогресс из облака'); }
+      }catch(e){}
+    });
+  }catch(e){}
+}
+
+/* ============ УТИЛИТЫ ============ */
+const $ = s => document.querySelector(s);
+const rndInt = (a,b) => a + Math.floor(Math.random()*(b-a+1));
+const pick = a => a[Math.floor(Math.random()*a.length)];
+const clamp = (v,a,b) => Math.max(a, Math.min(b,v));
+// Круги престижа уводят числа за триллионы, поэтому суффиксы идут до 10^90
+const SUF = ['','k','M','B','T','P','E','Z','Y','R','Q','aa','ab','ac','ad','ae','af','ag','ah','ai',
+             'aj','ak','al','am','an','ao','ap','aq','ar','as','at'];
+function fmt(n){
+  if(!isFinite(n)) return '∞';
+  n = Math.floor(n);
+  if(n < 1e4) return String(n);
+  let i = 0;
+  while(n >= 1000 && i < SUF.length-1){ n /= 1000; i++; }
+  // Суффиксы кончились — переходим на экспоненту, иначе получалась каша вида «7.3e+68at»
+  if(n >= 1000) return n.toExponential(2).replace('e+','e') + SUF[SUF.length-1];
+  return (n >= 100 ? n.toFixed(0) : n.toFixed(1)) + SUF[i];
+}
+function mmss(ms){
+  if(ms < 0) ms = 0;
+  const t = Math.ceil(ms/1000), h = Math.floor(t/3600), m = Math.floor(t%3600/60), s = t%60;
+  return h > 0 ? (h+'ч '+m+'м') : (m+':'+String(s).padStart(2,'0'));
+}
+const dayKey = () => new Date().toISOString().slice(0,10);
+// Ключ окна заданий: дата + номер окна внутри суток
+function hourKey(){
+  const d = new Date();
+  return d.toISOString().slice(0,10) + '#' + Math.floor(d.getHours() / C.QUEST_HOURS);
+}
+function nextHourAt(){
+  const d = new Date();
+  const step = C.QUEST_HOURS;
+  const next = (Math.floor(d.getHours()/step) + 1) * step;
+  const t = new Date(d); t.setHours(next, 0, 0, 0);
+  return t.getTime();
+}
+function weekKey(){
+  const d = new Date(), on = new Date(Date.UTC(d.getUTCFullYear(),d.getUTCMonth(),d.getUTCDate()));
+  const dn = on.getUTCDay() || 7; on.setUTCDate(on.getUTCDate()+4-dn);
+  const y0 = new Date(Date.UTC(on.getUTCFullYear(),0,1));
+  return on.getUTCFullYear()*100 + Math.ceil(((on-y0)/86400000 + 1)/7);
+}
+function toast(msg){
+  const box = $('#toasts');
+  for(const t of box.children) if(t.textContent === msg) return;
+  while(box.children.length >= 2) box.firstChild.remove();
+  const el = document.createElement('div');
+  el.className='toast'; el.textContent = msg;
+  box.appendChild(el);
+  setTimeout(()=>{ el.style.transition='opacity .3s'; el.style.opacity='0'; setTimeout(()=>el.remove(),300); }, 1800);
+}
+// renderAll, а не renderHud: иначе открытая вкладка магазина показывала
+// старый баланс и старые цены, пока не переключишься на поле и обратно.
+function addGems(n, why){
+  S.gems += n;
+  toast((why ? why + ': ' : '') + '+' + n + ' 💎');
+  SFX.gem(); renderAll(); save();
+}
+function spendGems(n){
+  if(S.gems < n){ noGems(n); return false; }
+  S.gems -= n; renderAll(); save(); return true;
+}
+
+/* ============ ПРОИЗВОДНЫЕ ============ */
+const isPremium = () => S.premiumUntil > Date.now();
+// Бак растёт с уровнем игрока: +ENERGY_PER_LEVEL за каждый
+const energyMax = () => Math.round((C.ENERGY_MAX + (S.level-1)*C.ENERGY_PER_LEVEL) *
+  (isPremium() ? 1 + C.PREM_ENERGY_PCT : 1));
+// Все доливки считаются от текущего бака, поэтому не отстают от уровня
+const canEnergy     = () => Math.round(energyMax() * C.ENERGY_CAN_PCT);
+const specialEnergy = () => Math.round(energyMax() * C.SPECIAL_ENERGY_PCT);
+const starterEnergy = () => Math.round(energyMax() * C.STARTER_ENERGY_PCT);
+// Каждое выполненное задание добавляет 10% ко всему получаемому опыту
+const xpMult = () => 1 + C.XP_PER_QUEST_BONUS * (S.questsDone|0);
+const regenSec  = () => C.ENERGY_REGEN_SEC / (isPremium() ? C.PREM_REGEN_MULT : 1);
+const orderSlots= () => C.ORDER_SLOTS + (isPremium() ? C.ORDER_SLOTS_PREM : 0);
+const xpNeed = l => Math.round(C.XP_BASE * Math.pow(l, C.XP_POW));
+// Цена предмета: экспонента по уровню, сверху множитель редкости
+const price = l => Math.round(C.SELL_BASE * Math.pow(C.SELL_POW, l-1) * RAR_COIN[rarOf(l)] *
+  Math.pow(C.GALAXY_COIN_MULT, galaxyOf(l)-1));
+// Опыт за слияние и за заказ тоже растёт с редкостью
+const mergeXp = l => Math.round(C.XP_PER_MERGE * RAR_XP[rarOf(l)] * Math.pow(C.GALAXY_XP_MULT, galaxyOf(l)-1) * xpMult());
+const orderXp = l => Math.round(C.XP_PER_ORDER_LVL * Math.sqrt(l) * RAR_XP[rarOf(l)] / 2 * xpMult());
+// Минимальный сброс банкомата: +1 уровень за каждые GEN_STEP_QUESTS заданий
+const genMin = () => clamp(1 + Math.floor(S.questsDone / C.GEN_STEP_QUESTS), 1, C.MAX_LVL - 2);
+const questsToNextGen = () => C.GEN_STEP_QUESTS - (S.questsDone % C.GEN_STEP_QUESTS);
+const rowsMax = () => {
+  let r = C.ROWS_START;
+  for(const lv of C.ROW_UNLOCK_LEVELS) if(S.level >= lv) r++;
+  return Math.min(C.BOARD_ROWS, r);
+};
+const cellOpen = i => i < S.rows * C.BOARD_COLS;
+/* ============ УНИКАЛЬНЫЕ ПРЕДМЕТЫ ============
+   Некоторые уровни цепочки — не просто вещь, а штука с зарядами:
+   тапаешь и получаешь пользу. Порядок в списке = приоритет, поэтому
+   пересечений кратностей быть не может. */
+const SPECIALS = [
+  { every:25, type:'safe',     ch:1, ic:'🏦', name:'Касса',
+    desc:l=>'Тап: ' + fmt(price(l)*C.SAFE_MULT) + ' монет, предмет уходит' },
+  { every:10, type:'producer', ch:3, ic:'🏭', name:'Станок',
+    desc:l=>'Тап: выдаёт ' + nameOf(Math.max(1, l - C.PRODUCER_BACK)) },
+  { every:13, type:'energy',   ch:2, ic:'🔌', name:'Генератор',
+    desc:()=>'Тап: +' + specialEnergy() + ' энергии' },
+  { every:17, type:'gems',     ch:1, ic:'💎', name:'Копилка',
+    desc:()=>'Тап: +' + C.SPECIAL_GEMS + ' алмазов' },
+  { every:23, type:'chest',    ch:1, ic:'📦', name:'Посылочный',
+    desc:()=>'Тап: бесплатная посылка' },
+];
+function specialOf(l){
+  for(const sp of SPECIALS) if(l >= sp.every && l % sp.every === 0) return sp;
+  return null;
+}
+function chargesFor(l){ const sp = specialOf(l); return sp ? sp.ch : null; }
+
+/* ============ ЛЕСТНИЦА 50 УРОВНЕЙ ИГРОКА ============ */
+// Множитель награды: каждые LVL_REWARD_STEP уровней +50%, потолок ×10 (на 90-м уровне)
+const rewardMult = l => Math.min(C.LVL_REWARD_CAP, 1 + C.LVL_REWARD_BONUS * Math.floor(l / C.LVL_REWARD_STEP));
+function levelReward(l){
+  const m = rewardMult(l);
+  if(l % 10 === 0){ const n = Math.round((75 + l*2) * m);
+    return { kind:'gems', n, em:'💎', text:fmt(n) + ' алмазов' }; }
+  if(l % 5 === 0){ const n = Math.round(2 * m);
+    return { kind:'chest', n, em:'📦', text:n + (n === 1 ? ' посылка' : n < 5 ? ' посылки' : ' посылок') }; }
+  if(l % 3 === 0) return { kind:'boost', em:'🤑', text:'Банкомат сошёл с ума' };
+  const n = Math.round((10 + Math.floor(l/4)*5) * m);
+  return { kind:'gems', n, em:'💎', text:fmt(n) + ' алмазов' };
+}
+function giveLevelReward(l){
+  const r = levelReward(l);
+  if(r.kind === 'gems')  S.gems += r.n;
+  if(r.kind === 'chest') S.pendingChests += r.n;
+  if(r.kind === 'boost') S.drop2Until = Math.max(S.drop2Until, Date.now()) + C.BOOST_DROP2_MIN*60000;
+  if(r.kind === 'row')   S.rows = rowsMax();
+  return r;
+}
+
+/* ============ ЭНЕРГИЯ ============ */
+function applyOffline(){
+  const now = Date.now(), cap = C.ENERGY_OFFLINE_CAP_H*3600000;
+  const dt = Math.min(now - (S.enTs||now), cap);
+  if(dt > 0 && S.energy < energyMax()){
+    const g = Math.floor(dt/(regenSec()*1000));
+    if(g > 0){ S.energy = Math.min(energyMax(), S.energy+g); S.enTs = (S.enTs||now) + g*regenSec()*1000; }
+  } else S.enTs = now;
+  if(S.energy >= energyMax()) S.enTs = now;
+}
+function tickEnergy(){
+  const now = Date.now();
+  if(S.energy >= energyMax()){ S.enTs = now; return; }
+  while(now - S.enTs >= regenSec()*1000 && S.energy < energyMax()){ S.energy++; S.enTs += regenSec()*1000; }
+}
+function spendEnergy(n){
+  if(S.energy < n){ offerEnergy(); return false; }
+  if(S.energy >= energyMax()) S.enTs = Date.now();
+  S.energy -= n;
+  if(S.energy <= 0 && !S.hadZeroEnergy){ S.hadZeroEnergy = true; armStarter(); }
+  return true;
+}
+
+/* ============ ПОЛЕ ============ */
+function firstEmpty(){ for(let i=0;i<S.rows*C.BOARD_COLS;i++) if(!S.board[i]) return i; return -1; }
+function countFree(){ let n=0; for(let i=0;i<S.rows*C.BOARD_COLS;i++) if(!S.board[i]) n++; return n; }
+function spawn(l, at){
+  l = clamp(l, 1, C.MAX_LVL);
+  const i = (at != null && !S.board[at]) ? at : firstEmpty();
+  if(i < 0){ toast('Класть некуда'); return -1; }
+  S.board[i] = { l, ch: chargesFor(l) };
+  if(l > S.seen) S.seen = l;
+  return i;
+}
+function boardHas(l){ return S.board.some(it=>it && it.l === l); }
+function removeOne(l){
+  for(let i=0;i<S.board.length;i++) if(S.board[i] && S.board[i].l === l){ S.board[i] = null; return true; }
+  return false;
+}
+
+/* ============ ГЕНЕРАТОР ============ */
+function genRoll(){
+  const lo = genMin();
+  let l = rndInt(lo, lo + C.GEN_SPREAD);
+  if(Math.random() < C.GEN_PLUS2_CHANCE) l++;
+  return clamp(l, 1, C.MAX_LVL);
+}
+function genTap(){
+  if(countFree() <= 0){ toast('Класть некуда'); SFX.err(); haptic('err'); return; }
+  if(!spendEnergy(C.ENERGY_TAP_COST)){ SFX.err(); haptic('err'); return; }
+  const n = (S.drop2Until > Date.now()) ? 2 : 1;
+  for(let k=0;k<n;k++){
+    if(countFree() <= 0) break;
+    const i = spawn(genRoll());
+    if(i >= 0) popCell(i);
+  }
+  SFX.tap(); haptic('light');
+  quest('tap', 1);
+  renderAll(); save();
+}
+
+/* ============ МЕРДЖ ============ */
+function tryMerge(from,to,quiet){
+  const a = S.board[from], b = S.board[to];
+  if(!a || !b || a.l !== b.l) return false;
+  if(a.l >= C.MAX_LVL){ if(!quiet) toast('Выше некуда'); return false; }   // упираемся только в технический потолок
+  const nl = a.l + 1;
+  S.board[from] = null;
+  S.board[to] = { l:nl, ch:chargesFor(nl) };
+  if(nl > S.seen){ S.seen = nl; if(!quiet) toast('Открыл: ' + nameOf(nl)); }
+  // Перевалили за сотый — начался новый виток цепочки
+  if(galaxyOf(nl) > (S.galaxySeen|0)){
+    S.galaxySeen = galaxyOf(nl);
+    galaxySheet(S.galaxySeen);
+  }
+  S.xp += mergeXp(nl);
+  quest('merge', 1);
+  quest('reach', nl);
+  if(quiet) return true;
+  // Заряжаем магнит: только ручные слияния, иначе магнит заряжал бы сам себя
+  S.mergeStreak = (S.mergeStreak|0) + 1;
+  if(S.mergeStreak >= C.MAGNET_PER_MERGES){
+    S.mergeStreak -= C.MAGNET_PER_MERGES;
+    S.magnets = (S.magnets|0) + 1;
+    toast('Магнит заряжен · всего ' + S.magnets); SFX.gem();
+  }
+  popCell(to); SFX.merge(rarOf(nl)); haptic('sel');
+  checkLevelUp(); renderAll(); save();
+  return true;
+}
+function popCell(i){
+  requestAnimationFrame(()=>{
+    const el = document.querySelector('.cell[data-i="'+i+'"] .item');
+    if(el){ el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop'); }
+  });
+}
+function countMergeable(){
+  const seen = new Map(); let n = 0;
+  for(let i=0;i<S.rows*C.BOARD_COLS;i++){
+    const it = S.board[i];
+    if(!it || it.l >= C.MAX_LVL) continue;
+    if(seen.has(it.l)){ seen.delete(it.l); n++; } else seen.set(it.l, i);
+  }
+  return n;
+}
+function mergeAll(){
+  const charged = (S.magnets|0) > 0;   // есть заряд — работает бесплатно и без ожидания
+  if(!charged && Date.now() < S.mergeAllUntil){
+    toast('Магнит остывает: ' + mmss(S.mergeAllUntil-Date.now())); SFX.err(); haptic('err'); return; }
+  if(countMergeable() === 0){ toast('Сливать нечего'); SFX.err(); haptic('err'); return; }
+  const was = S.seen;
+  let total = 0, guard = 0;
+  while(guard++ < 200){
+    const seen = new Map(); let did = false;
+    for(let i=0;i<S.rows*C.BOARD_COLS;i++){
+      const it = S.board[i];
+      if(!it || it.l >= C.MAX_LVL) continue;
+      if(seen.has(it.l)){ const j = seen.get(it.l); seen.delete(it.l); if(tryMerge(j,i,true)){ total++; did = true; } }
+      else seen.set(it.l, i);
+    }
+    if(!did) break;
+  }
+  if(total === 0){ toast('Сливать нечего'); SFX.err(); return; }
+  if(charged) S.magnets--;                                        // потратили заряд
+  else S.mergeAllUntil = Date.now() + C.MERGE_ALL_CD_MIN*60000;   // без заряда — на кулдаун
+  toast('Схлопнул ' + total + ' пар' + (S.seen > was ? ' · открыл: ' + nameOf(S.seen) : ''));
+  SFX.cascade(total); haptic('ok');
+  checkLevelUp(); renderAll(); save();
+}
+function findHint(){
+  const seen = new Map();
+  for(let i=0;i<S.rows*C.BOARD_COLS;i++){
+    const it = S.board[i];
+    if(!it || it.l >= C.MAX_LVL) continue;
+    if(seen.has(it.l)) return [seen.get(it.l), i];
+    seen.set(it.l, i);
+  }
+  return null;
+}
+
+/* ============ УРОВЕНЬ ИГРОКА ============ */
+function checkLevelUp(){
+  let up = false;
+  while(S.level < C.MAX_PLAYER_LVL && S.xp >= xpNeed(S.level)){ S.xp -= xpNeed(S.level); S.level++; up = true; }
+  if(S.level >= C.MAX_PLAYER_LVL) S.xp = Math.min(S.xp, xpNeed(C.MAX_PLAYER_LVL));
+  if(!up) return;
+  const got = [];
+  while(S.lvlTaken < S.level){ S.lvlTaken++; got.push({ lvl:S.lvlTaken, r:giveLevelReward(S.lvlTaken) }); }
+  // Каждый пятый уровень приносит ограниченное предложение
+  for(let l=S.level-got.length+1; l<=S.level; l++)
+    if(l % C.OFFER_ON_LEVEL_EVERY === 0) addOffer();
+  S.rows = rowsMax();
+  SFX.level(); haptic('ok');
+  fillOrders();
+  levelSheet(got);
+}
+
+/* ============ ЗАКАЗЫ ============ */
+function makeOrder(){
+  const lo = clamp(genMin() + 1, 2, C.MAX_LVL);
+  const hi = clamp(S.seen + 1, lo, C.MAX_LVL);
+  const l = rndInt(lo, hi);
+  return { l, coins:price(l)*C.ORDER_COIN_MULT, xp:orderXp(l),
+           chest: Math.random() < C.ORDER_CHEST_CHANCE,
+           gems: Math.random() < C.ORDER_GEM_CHANCE ? rndInt(C.ORDER_GEMS[0], C.ORDER_GEMS[1]) : 0 };
+}
+function fillOrders(){
+  while(S.orders.length < orderSlots()) S.orders.push(makeOrder());
+  if(S.orders.length > orderSlots()) S.orders.length = orderSlots();
+}
+function completeOrder(i){
+  const o = S.orders[i];
+  if(!o) return;
+  if(!boardHas(o.l)){ offerRescue(i); return; }
+  removeOne(o.l);
+  S.coins += o.coins; S.xp += o.xp;
+  quest('coins', o.coins);
+  let msg = '+' + fmt(o.coins) + ' 🪙  +' + o.xp + ' XP';
+  if(o.chest){ S.pendingChests++; msg += '  +📦'; }
+  if(o.gems){ S.gems += o.gems; msg += '  +' + o.gems + ' 💎'; }
+  toast(msg); SFX.order(); haptic('ok');
+  quest('order', 1);
+  S.orders.splice(i,1);
+  if(isPremium()) fillOrders();
+  else S.orderCdUntil = Date.now() + C.ORDER_REFRESH_SEC*1000;
+  checkLevelUp(); renderAll(); save();
+}
+function tickOrders(){
+  if(S.orders.length >= orderSlots()) return false;
+  if(isPremium() || Date.now() >= S.orderCdUntil){ fillOrders(); return true; }
+  return false;
+}
+function rerollOrders(){
+  if(S.rerollLeft > 0) S.rerollLeft--;
+  else if(!spendGems(C.REROLL_GEMS)) return;
+  S.orders = []; S.orderCdUntil = 0; fillOrders();
+  toast('Заказы поменялись'); SFX.order(); haptic('sel');
+  renderAll(); save();
+}
+
+/* ============ ЕЖЕДНЕВНЫЕ ЗАДАНИЯ ============ */
+const QUESTS = [
+  { id:'merge', text:n=>'Сделай ' + n + ' слияний',        goal:()=>rndInt(25,50) },
+  { id:'order', text:n=>'Сдай ' + n + ' заказов',          goal:()=>rndInt(3,6) },
+  { id:'tap',   text:n=>'Тапни банкомат ' + n + ' раз',    goal:()=>rndInt(30,60) },
+  { id:'reach', text:n=>'Собери ' + nameOf(n) + ' ' + emo(n), goal:()=>clamp(S.seen+1, 4, C.MAX_LVL) },
+  { id:'coins', text:n=>'Заработай ' + fmt(n) + ' монет',  goal:()=>Math.max(4000, Math.round(price(S.seen)*4)) },
+];
+function rollQuests(){
+  const pool = QUESTS.slice(), out = [];
+  for(let i=0;i<C.QUEST_COUNT && pool.length;i++){
+    const q = pool.splice(rndInt(0,pool.length-1),1)[0];
+    out.push({ id:q.id, goal:q.goal(), cur:0, done:false, claim:false });
+  }
+  return out;
+}
+function rollDay(){
+  const d = dayKey();
+  if(S.day !== d){
+    S.day = d;
+    S.rerollLeft = C.REROLL_FREE_DAY;   // бесплатная смена заказов — раз в сутки
+    save();
+  }
+  rollHour();
+}
+// Набор заданий живёт один час и меняется сам
+function rollHour(){
+  const h = hourKey();
+  if(S.hour === h) return;
+  S.hour = h;
+  S.quests = rollQuests();
+  S.questRerollLeft = C.QUEST_REROLL_FREE;
+  save();
+}
+function quest(kind,val){
+  if(!S.quests) return;
+  let ch = false;
+  for(const q of S.quests){
+    if(q.done || q.id !== kind) continue;
+    if(kind === 'reach') q.cur = Math.max(q.cur, val);
+    else q.cur += val;
+    if(q.cur >= q.goal){ q.done = true; q.claim = true; ch = true; }
+  }
+  if(ch){ toast('Задание выполнено!'); renderAlerts(); }
+}
+function rerollQuests(){
+  if(S.questRerollLeft > 0) S.questRerollLeft--;
+  else if(!spendGems(C.QUEST_REROLL_GEMS)) return;
+  S.quests = rollQuests();
+  toast('Задания поменялись'); SFX.order();
+  renderAll(); save();
+}
+// Награда за задание. Каждые GEN_STEP_QUESTS заданий поднимают сброс банкомата.
+function claimQuest(i){
+  const q = S.quests[i];
+  if(!q || !q.claim) return;
+  q.claim = false;
+  const wasMin = genMin();
+  S.questsDone++;
+  addGems(C.QUEST_GEMS, 'Задание');
+  const nowMin = genMin();
+  if(nowMin > wasMin){
+    SFX.level(); haptic('ok');
+    openSheet('<div class="bigem">' + emo(nowMin) + '</div>' +
+      '<h3 class="sh-h">Банкомат подрос</h3>' +
+      '<p class="sh-p">Теперь он сбрасывает не ниже, чем <b style="color:var(' + RAR_VAR[rarOf(nowMin)] + ')">' +
+        nameOf(nowMin) + '</b> вместо ' + nameOf(wasMin) + '. Выполнено заданий: ' + S.questsDone + '.</p>' +
+      '<div class="sh-row"><button class="btn gr" data-act="close">Отлично</button></div>');
+  }
+  renderAll(); save();
+}
+
+/* ============ НЕДЕЛЬНАЯ ВЫПЛАТА ЛИГИ ============
+   Место стабильно, потому что очки дают только витрины. При смене недели
+   выдаём приз за место, зафиксированное на прошлой неделе.
+   Соперники считаются локально — настоящая раздача приедет с бэкендом. */
+function myRank(){
+  const rows = leaderboard();
+  return rows.findIndex(r=>r.me);
+}
+function weeklyPayout(){
+  const wk = weekKey();
+  if(S.league.week === wk) return;
+  const hadWeek = S.league.week > 0;
+  const rank = S.league.rank, di = S.league.div|0;
+  S.league.week = wk;
+  S.league.seed = Math.floor(Math.random()*1e9);
+  if(hadWeek && rank != null && rank >= 0){
+    const prize = prizeFor(rank, di);
+    if(prize > 0){
+      S.gems += prize;
+      setTimeout(()=>openSheet('<div class="bigem">🏆</div>' +
+        '<h3 class="sh-h">Неделя закрыта</h3>' +
+        '<p class="sh-p">Ты финишировал <b>' + (rank+1) + '-м</b> в дивизионе ' + divisions()[di][0] +
+        '. Награда за место — <b style="color:var(--gem)">' + prize + ' 💎</b>.</p>' +
+        '<div class="sh-row"><button class="btn gr" data-act="close">Забрать</button></div>'), 900);
+    }
+  }
+  S.league.rank = null;
+  save();
+}
+
+/* ============ ВИТРИНЫ: ОЛИГАРХ / ПРЕСТИЖ / СУПЕРПРЕСТИЖ ============
+   Пятьдесят предметов в каждой, покупаются один раз за монеты.
+   Каждый купленный навсегда добавляет очки в лигу. */
+const TIER_NAME = ['Олигарх','Престиж','Суперпрестиж'];
+const TIER_FRAME = ['чёрная рамка','золотая рамка','бриллиантовая рамка'];
+// Римская запись круга: I, II, III, IV, ... без потолка
+function roman(n){
+  const T = [[1000,'M'],[900,'CM'],[500,'D'],[400,'CD'],[100,'C'],[90,'XC'],[50,'L'],[40,'XL'],
+             [10,'X'],[9,'IX'],[5,'V'],[4,'IV'],[1,'I']];
+  let out = '';
+  for(const [v,c] of T) while(n >= v){ out += c; n -= v; }
+  return out;
+}
+const cycleName = (t, cyc) => TIER_NAME[t] + (cyc > 1 ? ' ' + roman(cyc) : '');
+const cyclePriceMult = cyc => Math.pow(C.CYCLE_PRICE_MULT, cyc-1);
+const cyclePtsMult   = cyc => Math.pow(C.CYCLE_PTS_MULT,   cyc-1);
+const vipLvl = i => clamp((i+1)*2, 1, C.CHAIN_LEN);
+function vipPrice(i,t,cyc){
+  const [lo,hi] = C.VIP_RANGE[t];
+  return Math.round(lo * cyclePriceMult(cyc || S.cycle) * Math.pow(hi/lo, i/(C.VIP_COUNT-1)));
+}
+const vipPts = (i,t,cyc) => C.VIP_PTS_STEP * (i+1) * C.VIP_TIER_PTS[t] * cyclePtsMult(cyc || S.cycle);
+const vipOwned = (i,t) => S.vip[t].indexOf(i) >= 0;
+const vipDone  = t => S.vip[t].length >= C.VIP_COUNT;
+const tierOpen = t => t === 0 || vipDone(t-1);
+const cyclePtsTotal = cyc => C.VIP_PTS_STEP * (C.VIP_COUNT*(C.VIP_COUNT+1)/2) *
+  C.VIP_TIER_PTS.reduce((a,b)=>a+b,0) * cyclePtsMult(cyc);
+function leagueMax(){
+  let n = 0;
+  for(let c=1;c<=C.LEAGUE_TOP_CYCLE;c++) n += cyclePtsTotal(c);
+  return Math.round(n);
+}
+function vipBonus(){
+  let n = S.ptsBank;
+  for(let t=0;t<3;t++) for(const i of S.vip[t]) n += vipPts(i,t);
+  return Math.round(n);
+}
+function vipBuy(i,t){
+  if(!tierOpen(t) || vipOwned(i,t)) return;
+  const p = vipPrice(i,t);
+  if(S.coins < p){ toast('Не хватает ' + fmt(p - S.coins) + ' 🪙'); SFX.err(); haptic('err'); return; }
+  S.coins -= p;
+  S.vip[t].push(i);
+  SFX.coin(); haptic('ok');
+  toast(nameOf(vipLvl(i)) + ' в состоянии · +' + fmt(vipPts(i,t)) + ' очков');
+  if(vipDone(t) && t < 2){
+    SFX.level();
+    openSheet('<div class="bigem">' + ['👑','💠'][t] + '</div>' +
+      '<h3 class="sh-h">Открыт ' + cycleName(t+1, S.cycle) + '</h3>' +
+      '<p class="sh-p">Витрина «' + cycleName(t, S.cycle) + '» собрана целиком. Следующая дороже, ' +
+        TIER_FRAME[t+1] + ' и даёт втрое больше очков за предмет.</p>' +
+      '<div class="sh-row"><button class="btn gold" data-act="close">Погнали</button></div>');
+  }
+  if(vipDone(2)) nextCycle();
+  renderAll(); save();
+}
+// Весь Суперпрестиж выкуплен — начинается следующий круг: витрины пустеют,
+// цены и очки растут, набранные очки уходят в банк и остаются навсегда.
+function nextCycle(){
+  const closed = S.cycle;
+  S.ptsBank += Math.round(cyclePtsTotal(closed));
+  S.cycle++;
+  S.vip = [[],[],[]];
+  SFX.level(); haptic('ok');
+  setTimeout(()=>openSheet('<div class="bigem">♻️</div>' +
+    '<h3 class="sh-h">Круг ' + roman(closed) + ' закрыт</h3>' +
+    '<p class="sh-p">Все три витрины выкуплены. Открывается <b style="color:var(--gold)">' +
+      cycleName(0, S.cycle) + '</b>: цены выше в ' + fmt(C.CYCLE_PRICE_MULT) +
+      ' раз, очки за предмет — втрое.<br>Заработанные ' + fmt(S.ptsBank) + ' очков остаются навсегда.</p>' +
+    '<div class="sh-row"><button class="btn gold" data-act="close">Дальше</button></div>'), 300);
+}
+
+/* ============ ЛИГА ============ */
+// Очки лиги теперь дают ТОЛЬКО витрины. Никаких очков за слияния и заказы.
+function leaguePts(){ return vipBonus(); }
+function mulberry(a){ return function(){ a|=0; a=a+0x6D2B79F5|0; let t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
+/* Ники в духе тех, что реально встречаются в играх: латиница, кириллица,
+   цифры, украшения. Собираются из частей по детерминированному сиду. */
+const NICK_CORE = ['Shadow','Killer','Dragon','Sniper','Nagibator','Legenda','Xzibit','Dark','Ghost','Viper',
+ 'Kripta','Baron','Loki','Kraken','Zeus','Nikita','Sanya','Vovan','Tolyan','Кисуля','Барсик','Хомяк','Мажор',
+ 'Vasya','Petrovich','Boss','Money','Cash','Trader','Broker','Pixel','Neon','Turbo','Rocket','Wolf','Bear',
+ 'Panda','Tiger','Fox','Ниндзя','Батя','Дядя','Тётя','Пельмень','Котлета','Сырок','Борщ','Бобёр','Ёжик','Крот']
+const NICK_PRE  = ['','','','xX_','_','pro','MR_','THE_','iam','Just','Real','Not','Ultra','Mega','Super','Old','New'];
+const NICK_POST = ['','','','_Xx','_pro','228','777','2007','2010','_off','_ttv','1337','_yt','__','_TG','99','01','13','_ru'];
+function nickFor(i, r){
+  const core = NICK_CORE[Math.floor(r()*NICK_CORE.length)];
+  const pre  = NICK_PRE[Math.floor(r()*NICK_PRE.length)];
+  const post = NICK_POST[Math.floor(r()*NICK_POST.length)];
+  let n = pre + core + post;
+  if(n.length < 4) n += Math.floor(r()*900+100);
+  return n;
+}
+function startOfWeek(){ const d = new Date(); const dd = (d.getDay()||7)-1; d.setHours(0,0,0,0); d.setDate(d.getDate()-dd); return d.getTime(); }
+function endOfWeek(){ return startOfWeek() + 7*86400000; }
+function leaderboard(){
+  const my = leaguePts(), di = divIndex(my), d = divisions()[di];
+  const r = mulberry(weekKey()*7919 + (S.league.seed|0) + di*131);
+  const rows = [];
+  // Соперники — только из твоего дивизиона: он и есть лига, за места в ней платят
+  for(let i=0;i<C.LEAGUE_SIZE-1;i++){
+    // Равномерно по диапазону дивизиона: место растёт линейно вместе с тем,
+    // сколько витрины ты выкупил внутри своей лиги
+    const span = d[2] - d[1];
+    rows.push({ name: nickFor(i, r), pts: Math.round(d[1] + r() * span), me:false });
+  }
+  rows.push({ name:(tg && tg.initDataUnsafe && tg.initDataUnsafe.user && tg.initDataUnsafe.user.first_name) || 'Ты',
+              pts: my, me:true });
+  rows.sort((a,b)=>b.pts-a.pts);
+  return rows;
+}
+/* Дивизионы — доли от текущего потолка лиги, а не жёсткие числа.
+   Потолок = очки за все круги до LEAGUE_TOP_CYCLE, то есть по лидеру игры. */
+const DIV_NAMES = ['Бронза','Серебро','Золото','Платина','Алмаз','Легенда'];
+function divisions(){
+  const max = leagueMax();
+  return DIV_NAMES.map((n,i)=>[ n, Math.round(max * C.DIV_FRAC[i]),
+    i < DIV_NAMES.length-1 ? Math.round(max * C.DIV_FRAC[i+1]) : max + 1 ]);
+}
+function divIndex(p){
+  const D = divisions();
+  let k = 0;
+  for(let i=0;i<D.length;i++) if(p >= D[i][1]) k = i;
+  return k;
+}
+function divisionOf(p){ return divisions()[divIndex(p)]; }
+const prizeFor = (rank, dIdx) => rank < C.LEAGUE_PRIZES.length
+  ? Math.round(C.LEAGUE_PRIZES[rank] * C.LEAGUE_DIV_MULT[dIdx]) : 0;
+
+/* ============ ПОСЫЛКИ (награды вдвое щедрее прежних) ============ */
+function rollRarity(){
+  S.pulls++;
+  if(S.pity + 1 >= C.PITY_PULLS){ S.pity = 0; return rndInt(2,4); }
+  const r = Math.random(); let acc = 0;
+  for(let i=0;i<C.ODDS.length;i++){ acc += C.ODDS[i]; if(r < acc){ if(i >= 2) S.pity = 0; else S.pity++; return i; } }
+  S.pity++; return 0;
+}
+function chestReward(rar){
+  // Предмет обязан быть ТОЙ ЖЕ редкости, что показана на посылке: берём уровень
+  // строго из полосы этой редкости. Полоса ограничена прогрессом (seen + 2).
+  const lo = rar*RAR_BAND + 1;
+  const hi = Math.min((rar+1)*RAR_BAND, S.seen + 2);
+  const canItem = hi >= lo;
+  if(rar === 0){
+    if(canItem && Math.random() < .5) return { kind:'item', l:rndInt(Math.max(lo,hi-4), hi), rar };
+    return { kind:'coins', n:pctCoins(C.CHEST_COIN_PCT[0], 800), rar };
+  }
+  if(rar === 1 && !canItem && Math.random() < .45) return { kind:'coins', n:pctCoins(C.CHEST_COIN_PCT[1], 3000), rar };
+  if(rar === 1 && canItem && Math.random() < .2)  return { kind:'coins', n:pctCoins(C.CHEST_COIN_PCT[1], 3000), rar };
+  if(rar === 3 && Math.random() < .2) return { kind:'boost', rar };
+  if(canItem && Math.random() < .65) return { kind:'item', l:rndInt(Math.max(lo,hi-4), hi), rar };
+  // Полоса ещё не открыта прогрессом — вместо предмета алмазы по классу посылки
+  const g = [[0,0],[30,50],[70,110],[150,220],[300,450]][rar];
+  return { kind:'gems', n:rndInt(g[0], g[1]), rar, locked: !canItem };
+}
+function applyReward(rw){
+  if(rw.kind === 'coins') S.coins += rw.n;
+  if(rw.kind === 'gems')  S.gems  += rw.n;
+  if(rw.kind === 'boost') S.drop2Until = Math.max(S.drop2Until, Date.now()) + C.BOOST_DROP2_MIN*60000;
+  if(rw.kind === 'item'){
+    if(countFree() <= 0){ rw.sold = price(rw.l); S.coins += rw.sold; }
+    else spawn(rw.l);
+  }
+}
+function rewardLine(rar, rw){
+  const col = 'var(' + RAR_VAR[rar] + ')';
+  let ic = '🪙', tx = '';
+  if(rw.kind === 'coins'){ ic = '🪙'; tx = '+' + fmt(rw.n) + ' монет'; }
+  if(rw.kind === 'gems'){  ic = '💎'; tx = '+' + rw.n + ' алмазов' + (rw.locked ? ' · предметы этой редкости ещё не открыты' : ''); }
+  if(rw.kind === 'boost'){ ic = '🤑'; tx = 'Банкомат сошёл с ума, ' + C.BOOST_DROP2_MIN + ' мин'; }
+  if(rw.kind === 'item'){  ic = emo(rw.l); tx = nameOf(rw.l) + ' · ур. ' + rw.l + (rw.sold ? ' → продан за ' + fmt(rw.sold) : ''); }
+  return '<div class="lootrow" style="--lc:' + col + '">' +
+    '<span class="li">' + ic + '</span><span class="lt">' + tx + '</span>' +
+    '<span class="lr">' + RARITY[rar] + '</span></div>';
+}
+function openChests(n){
+  const got = []; let best = 0;
+  for(let i=0;i<n;i++){
+    const rar = rollRarity(), rw = chestReward(rar);
+    applyReward(rw); got.push({rar,rw});
+    if(rar > best) best = rar;
+  }
+  SFX.chest(best); haptic(best >= 2 ? 'ok' : 'light');
+  const head = n === 1
+    ? '<div class="bigem">' + (got[0].rw.kind === 'item' ? emo(got[0].rw.l) : '📦') + '</div>' +
+      '<h3 class="sh-h" style="color:var(' + RAR_VAR[got[0].rar] + ')">' + RARITY[got[0].rar] + '</h3>'
+    : '<div class="bigem">🚚</div><h3 class="sh-h">Вскрыл ' + n + ' посылок</h3>';
+  openSheet(head + '<div class="loot">' + got.map(g=>rewardLine(g.rar,g.rw)).join('') + '</div>' +
+    '<p class="sh-p" style="margin:8px 0 0">До жирного улова: ' + (C.PITY_PULLS - S.pity) + '</p>' +
+    '<div class="sh-row"><button class="btn gr" data-act="close">В карман</button></div>');
+  renderAll(); save();
+}
+
+/* ============ ЖИВЫЕ ПРЕДЛОЖЕНИЯ ============
+   Пул разнородных наборов с разными ценами и сроками жизни. */
+const OFFER_POOL = [
+  { k:'en1',  ic:'⚡',  t:'Бочка энергии',     gems:20,  min:20, give:{en:1.5},
+    d:()=>'Полтора бака сверху — ' + Math.round(energyMax()*1.5) + ' ⚡' },
+  { k:'en2',  ic:'🛢️', t:'Заправка досуха',   gems:35,  min:15, give:{en:2.5},
+    d:()=>'Два с половиной бака — ' + Math.round(energyMax()*2.5) + ' ⚡' },
+  { k:'co1',  ic:'🪙',  t:'Горсть монет',      gems:15,  min:10, give:{co:1.5},
+    d:()=>'Кошелёк вырастет в полтора раза: +' + fmt(pctCoins(1.5, 2000)) + ' 🪙' },
+  { k:'co2',  ic:'💰',  t:'Мешок налика',      gems:45,  min:30, give:{co:3},
+    d:()=>'Кошелёк ×4: +' + fmt(pctCoins(3, 9000)) + ' 🪙' },
+  { k:'co3',  ic:'🏦',  t:'Инкассация',        gems:150, min:20, give:{co:10},
+    d:()=>'Кошелёк ×11: +' + fmt(pctCoins(10, 40000)) + ' 🪙' },
+  { k:'ch1',  ic:'📦',  t:'Три посылки',       gems:60,  min:25, give:{ch:3},
+    d:()=>'Три вскрытия сразу, все награды списком' },
+  { k:'ch2',  ic:'🚚',  t:'Семь посылок',      gems:130, min:20, give:{ch:7},
+    d:()=>'Семь вскрытий — дешевле, чем поштучно' },
+  { k:'mg',   ic:'🧲',  t:'Пачка магнитов',    gems:40,  min:30, give:{mg:8},
+    d:()=>'Восемь зарядов магнита, в запасе сейчас ' + (S.magnets|0) },
+  { k:'bo',   ic:'🤑',  t:'Двойной банкомат',  gems:25,  min:15, give:{bo:20},
+    d:()=>'Двадцать минут по две пачки за тап' },
+  { k:'mix1', ic:'🎁',  t:'Набор игрока',      gems:70,  min:30, give:{en:2, co:2, ch:2},
+    d:()=>'Два бака, кошелёк ×3 и две посылки' },
+  { k:'mix2', ic:'🧳',  t:'Большой заезд',     gems:120, min:25, give:{en:3, co:4, ch:3, mg:5},
+    d:()=>'Три бака, кошелёк ×5, три посылки и пять магнитов' },
+  { k:'prem', ic:'👑',  t:'Карта на три дня',  gems:200, min:45, give:{prem:3},
+    d:()=>'Золотая карта на трое суток' },
+];
+function makeOffer(){
+  const busy = S.offers.map(o=>o.k);
+  const free = OFFER_POOL.filter(o=>busy.indexOf(o.k) < 0);
+  if(!free.length) return null;
+  const tpl = pick(free);
+  return { k:tpl.k, until: Date.now() + tpl.min*60000 };
+}
+function addOffer(){
+  if(S.offers.length >= C.OFFER_MAX) return false;
+  const o = makeOffer();
+  if(!o) return false;
+  S.offers.push(o);
+  renderAlerts();
+  return true;
+}
+// Чистим просроченные и подсыпаем новые по таймеру
+function tickOffers(){
+  const n = S.offers.length;
+  S.offers = S.offers.filter(o=>o.until > Date.now());
+  let changed = n !== S.offers.length;
+  if(Date.now() >= (S.offerNextAt||0)){
+    S.offerNextAt = Date.now() + C.OFFER_EVERY_MIN*60000;
+    if(addOffer()) changed = true;
+  }
+  return changed;
+}
+function offerBuy(i){
+  const o = S.offers[i];
+  if(!o) return;
+  const tpl = OFFER_POOL.find(x=>x.k === o.k);
+  if(!tpl) { S.offers.splice(i,1); return; }
+  if(!spendGems(tpl.gems)) return;
+  const g = tpl.give;
+  let chests = 0;
+  if(g.en){ if(S.energy >= energyMax()) S.enTs = Date.now(); S.energy += Math.round(energyMax()*g.en); }
+  if(g.co){ S.coins += pctCoins(g.co, 2000); }
+  if(g.mg){ S.magnets = (S.magnets|0) + g.mg; }
+  if(g.bo){ S.drop2Until = Math.max(S.drop2Until, Date.now()) + g.bo*60000; }
+  if(g.prem){ S.premiumUntil = Math.max(S.premiumUntil, Date.now()) + g.prem*86400000; fillOrders(); }
+  if(g.ch){ chests = g.ch; }
+  S.offers.splice(i,1);
+  SFX.coin(); haptic('ok');
+  toast(tpl.t + ' — забрал');
+  if(chests) openChests(chests); else { renderAll(); save(); }
+}
+
+/* ============ ОФФЕРЫ ============ */
+function armStarter(){
+  if(S.starterDone || S.starterUntil > Date.now()) return;
+  S.starterUntil = Date.now() + C.OFFER_STARTER_HOURS*3600000;
+  setTimeout(showStarter, 400);
+}
+function showStarter(){
+  if(S.starterDone || S.starterUntil < Date.now()) return;
+  openSheet('<div class="bigem">🧳</div>' +
+    '<h3 class="sh-h">Подъёмные<span class="pill o">один раз</span></h3>' +
+    '<p class="sh-p">Бак пустой, а мержить хочется. ' + starterEnergy() + ' энергии, <b style="color:var(--gold)">' +
+      fmt(starterCoins()) + ' 🪙</b> и сумасшедший банкомат на 10 минут.</p>' +
+    '<div class="timer" id="stTimer"></div>' +
+    '<div class="sh-row"><button class="btn" data-act="close">Обойдусь</button>' +
+    '<button class="btn pri" data-act="gbuy" data-id="offer_starter">' + C.OFFER_STARTER_GEMS + ' 💎</button></div>');
+}
+function offerRescue(i){
+  const o = S.orders[i]; if(!o) return;
+  const d = dayKey();
+  if(S.rescueDay !== d){ S.rescueDay = d; S.rescueCount = 0; }
+  const can = S.rescueCount < C.OFFER_RESCUE_MAX_DAY && Date.now() >= S.rescueCdUntil && boardHas(o.l-1);
+  if(!can){ toast('Нужно: ' + nameOf(o.l).toLowerCase()); SFX.err(); haptic('err'); return; }
+  S.rescueCount++; S.rescueCdUntil = Date.now() + C.OFFER_RESCUE_CD_MIN*60000;
+  S.rescueTarget = o.l;
+  openSheet('<div class="bigem">' + emo(o.l) + '</div>' +
+    '<h3 class="sh-h">Одной вещи не хватает</h3>' +
+    '<p class="sh-p">Достанем по своим каналам: ' + nameOf(o.l).toLowerCase() + ' — и заказ закрыт, ' +
+      fmt(o.coins) + ' 🪙 и ' + o.xp + ' XP. Сегодня так выручим ещё ' + (C.OFFER_RESCUE_MAX_DAY - S.rescueCount) + ' раз.</p>' +
+    '<div class="sh-row"><button class="btn" data-act="close">Сам домержу</button>' +
+    '<button class="btn pri" data-act="gbuy" data-id="offer_rescue">' + C.OFFER_RESCUE_GEMS + ' 💎</button></div>');
+  save();
+}
+function weekendActive(){ const d = new Date().getDay(); return (d === 0 || d === 6) && S.weekendWeek !== weekKey(); }
+function offerEnergy(){
+  openSheet('<div class="bigem">⚡</div>' +
+    '<h3 class="sh-h">Банкомат зажевал карту</h3>' +
+    '<p class="sh-p">Энергия на нуле. Само накапает по +1 каждые ' + Math.round(regenSec()) + ' сек, до полного бака ' +
+      mmss((energyMax()-S.energy)*regenSec()*1000) + '. Канистра доливает ' + (C.ENERGY_CAN_PCT*100) +
+      '% бака, сейчас это ' + canEnergy() + ' ⚡. Или не ждём.</p>' +
+    '<div class="sh-row"><button class="btn" data-act="close">Подожду</button>' +
+    '<button class="btn pri" data-act="gbuy" data-id="energy_30">+' + (C.ENERGY_CAN_PCT*100) + '% ⚡ · ' + GOODS.energy_30.gems + ' 💎</button></div>' +
+    '<div class="sh-row"><button class="btn pri" data-act="gbuy" data-id="energy_full" style="flex:1">Под пробку · ' + GOODS.energy_full.gems + ' 💎</button></div>');
+}
+
+/* ============ ПАКЕТЫ МОНЕТ ============
+   Дают долю от того, что уже накоплено, поэтому не обесцениваются
+   с ростом экономики. Каждый — раз в час. */
+function coinPackAmount(id){
+  const c = Math.max(0, S.coins);
+  if(id === 'coins_1') return Math.max(C.COINS_1_MIN, Math.round(c * C.COINS_1_MULT));
+  return Math.max(C.COINS_2_MIN, Math.round(c * C.COINS_2_MULT));
+}
+const coinCdLeft = id => Math.max(0, (S.coinCd && S.coinCd[id] || 0) - Date.now());
+// Доля от текущего баланса, но не меньше нижнего порога
+const pctCoins = (mult, min) => Math.max(min, Math.round(Math.max(0,S.coins) * mult));
+const chestCoinPrice = () => pctCoins(C.CHEST_PRICE_PCT, C.CHEST_COIN_PRICE);
+const starterCoins = () => pctCoins(C.OFFER_STARTER_PCT, 15000);
+const weekendCoins = () => pctCoins(C.OFFER_WEEKEND_PCT, 40000);
+
+/* ============ ПОКУПКА ЗА АЛМАЗЫ ============ */
+function gemBuy(id){
+  const g = GOODS[id];
+  if(!g) return;
+  // Кулдаун проверяем ДО списания алмазов, иначе они сгорели бы впустую
+  if(id === 'coins_1' || id === 'coins_2'){
+    const left = coinCdLeft(id);
+    if(left > 0){ toast(g.title + ': ещё ' + mmss(left)); SFX.err(); haptic('err'); return; }
+  }
+  if(!spendGems(g.gems)) return;
+  SFX.coin();
+  switch(id){
+    case 'energy_full': S.energy = energyMax(); S.enTs = Date.now(); toast('Бак полный'); break;
+    case 'energy_30':   if(S.energy >= energyMax()) S.enTs = Date.now(); S.energy += canEnergy(); toast('+' + canEnergy() + ' ⚡'); break;
+    case 'boost_drop2': S.drop2Until = Math.max(S.drop2Until, Date.now()) + C.BOOST_DROP2_MIN*60000; toast('Банкомат сошёл с ума'); break;
+    case 'coins_1': case 'coins_2': {
+      const n = coinPackAmount(id);
+      S.coins += n; quest('coins', n);
+      S.coinCd[id] = Date.now() + C.COIN_BUY_CD_MIN*60000;
+      toast('+' + fmt(n) + ' 🪙');
+      break;
+    }
+    case 'magnets_10':  S.magnets = (S.magnets|0) + C.MAGNET_PACK; toast('Магнитов: ' + S.magnets); break;
+    case 'chest_1':     openChests(1); return;
+    case 'chest_10':    openChests(10); return;
+    case 'premium_week':
+      S.premiumUntil = Math.max(S.premiumUntil, Date.now()) + C.PREM_DAYS*86400000;
+      S.enTs = Date.now(); fillOrders(); toast('Золотая карта в кармане'); break;
+    case 'offer_starter':
+      S.energy += starterEnergy(); S.coins += starterCoins();
+      S.drop2Until = Math.max(S.drop2Until, Date.now()) + C.BOOST_DROP2_MIN*60000;
+      S.starterDone = true; toast('Подъёмные получены'); break;
+    case 'offer_rescue':
+      if(S.rescueTarget){ spawn(S.rescueTarget); S.rescueTarget = null; toast('Вещь на поле'); }
+      break;
+    case 'offer_weekend':
+      S.energy = energyMax(); S.coins += weekendCoins(); S.weekendWeek = weekKey();
+      toast('Загул оплачен'); openChests(3); return;
+  }
+  renderAll(); save();
+}
+
+/* ============ СБРОС ПРОГРЕССА (кнопка на экране Лиги) ============ */
+async function wipeSave(){
+  const ok = await ask('Начать заново?',
+    'Сотрутся уровень, алмазы, монеты, поле, задания и место в лиге.\nВернуть будет нельзя.',
+    'Стереть');
+  if(!ok) return;
+  clearTimeout(saveT);
+  try{ localStorage.removeItem(C.SAVE_KEY); }catch(e){}
+  try{ if(tg && tg.CloudStorage) tg.CloudStorage.removeItem(C.SAVE_KEY, ()=>{}); }catch(e){}
+  S = fresh();
+  S.day = '';                    // чтобы заново раскатились задания и бесплатные смены
+  rollDay();
+  S.league.week = weekKey();
+  S.rows = rowsMax();
+  fillOrders();
+  S.tut = true;                  // поле остаётся пустым: начинаем с нуля, как просили
+  buildBoard();                  // перестраиваем клетки, чтобы не остались старые предметы
+  go('game');
+  toast('Начали заново');
+  SFX.level(); haptic('ok');
+  save();
+}
+
+/* ============ ЛИСТЫ ============ */
+let askRes = null;
+function openSheet(html){
+  $('#sheet').innerHTML = '<button class="x" data-act="close" aria-label="Закрыть">✕</button>' + html;
+  $('#veil').classList.add('on');
+}
+function closeSheet(){ $('#veil').classList.remove('on'); if(askRes){ askRes(false); askRes = null; } }
+function ask(title,text,ok){
+  return new Promise(res=>{
+    askRes = res;
+    openSheet('<h3 class="sh-h">' + title + '</h3>' +
+      '<p class="sh-p" style="white-space:pre-line">' + text + '</p>' +
+      '<div class="sh-row"><button class="btn" data-act="no">Не надо</button>' +
+      '<button class="btn pri" data-act="yes">' + ok + '</button></div>');
+  });
+}
+function noGems(need){
+  SFX.err(); haptic('err');
+  openSheet('<div class="bigem">💎</div><h3 class="sh-h">Алмазов не хватает</h3>' +
+    '<p class="sh-p">Нужно ' + need + ', у тебя ' + S.gems + '. Алмазы падают за заказы, задания, уровни и посылки — или берутся в магазине.</p>' +
+    '<div class="sh-row"><button class="btn" data-act="close">Ладно</button>' +
+    '<button class="btn pri" data-act="toshop">В магазин</button></div>');
+}
+function levelSheet(got){
+  const rows = got.map(g=>'<div class="lootrow" style="--lc:var(--green)">' +
+    '<span class="li">' + g.r.em + '</span><span class="lt">' + g.r.text + '</span>' +
+    '<span class="lr">УР ' + g.lvl + '</span></div>').join('');
+  openSheet('<div class="bigem">🎉</div><h3 class="sh-h">Поднялся до ' + S.level + '</h3>' +
+    '<div class="loot">' + rows + '</div>' +
+    '<p class="sh-p" style="margin:8px 0 0">Следующая награда на ' + Math.min(S.level+1, C.MAX_PLAYER_LVL) + ' уровне</p>' +
+    '<div class="sh-row"><button class="btn gr" data-act="close">Погнали</button></div>');
+}
+// Первое слияние за сотый уровень — Галактический престиж
+function galaxySheet(g){
+  const l = (g-1)*C.CHAIN_LEN + 1;
+  SFX.level(); haptic('ok');
+  setTimeout(()=>openSheet('<div class="bigem">🌌</div>' +
+    '<h3 class="sh-h">' + (g === 2 ? 'Поздравляем, взят Галактический престиж!' : 'Галактический престиж ' + roman(g)) + '</h3>' +
+    '<p class="sh-p">Две Корпорации №1' + (g > 2 ? ' ' + roman(g-1) : '') + ' слились в <b style="color:var(--gold)">' +
+      emo(l) + ' ' + nameOf(l) + '</b> — цепочка пошла по второму кругу.<br>' +
+      'Предметы те же, но цена продолжает расти без сброса, а опыт за слияние теперь в ' +
+      C.GALAXY_XP_MULT + ' раз больше.</p>' +
+    '<div class="sh-row"><button class="btn gold" data-act="close">Дальше</button></div>'), 260);
+}
+function itemSheet(i){
+  const it = S.board[i]; if(!it) return;
+  const rar = rarOf(it.l), sp = specialOf(it.l);
+  const next = it.l < C.MAX_LVL ? (emo(it.l+1) + ' ' + nameOf(it.l+1)) : 'дальше некуда, это технический потолок';
+  openSheet('<div class="bigem">' + emo(it.l) + '</div><h3 class="sh-h">' + nameOf(it.l) + '</h3>' +
+    '<p class="sh-p">Уровень ' + it.l + ' · виток ' + roman(galaxyOf(it.l)) +
+      ' · <span style="color:var(' + RAR_VAR[rar] + ')">' + RARITY[rar] + '</span><br>' +
+      'Два таких складываются в ' + next + '<br>' +
+      'Слияние даёт ' + mergeXp(Math.min(it.l+1,C.MAX_LVL)) + ' XP' +
+      (sp ? '<br><b style="color:var(--gold)">' + sp.ic + ' ' + sp.name + '</b> · ' + sp.desc(it.l) +
+             ' · зарядов ' + (it.ch||0) : '') + '</p>' +
+    '<div class="sh-row"><button class="btn" data-act="close">Закрыть</button>' +
+    '<button class="btn gr" data-act="sell" data-i="' + i + '">Сбагрить · ' + fmt(price(it.l)) + ' 🪙</button></div>');
+}
+
+/* ============ РЕНДЕР ============ */
+function renderHud(){
+  $('#hLvl').textContent = 'УР ' + S.level;
+  $('#hCoins').textContent = fmt(S.coins);
+  $('#hGems').textContent = fmt(S.gems);
+  const em = energyMax();
+  $('#fEn').style.width = clamp(S.energy/em*100,0,100) + '%';
+  $('#hEnT').textContent = S.energy >= em ? 'полный'
+    : (Math.floor(S.energy) + '/' + em + ' · ' + mmss(regenSec()*1000 - (Date.now()-S.enTs)));
+  const need = xpNeed(S.level);
+  $('#fXp').style.width = clamp(S.xp/need*100,0,100) + '%';
+  $('#hXpT').textContent = S.level >= C.MAX_PLAYER_LVL ? 'максимум' : (Math.floor(S.xp) + '/' + need);
+  const sub = [emo(genMin()) + ' ' + nameOf(genMin())];
+  if(S.drop2Until > Date.now()) sub.push('бешеный ' + mmss(S.drop2Until-Date.now()));
+  else sub.push(C.GEN_STEP_QUESTS === 1 ? '+1 за задание' : 'до роста: ' + questsToNextGen());
+  $('#genSub').textContent = sub.join(' · ');
+  $('#gen').classList.toggle('dead', S.energy < C.ENERGY_TAP_COST);
+  const pairs = countMergeable(), cd = S.mergeAllUntil - Date.now();
+  const charged = (S.magnets|0) > 0;
+  const bm = $('#btnMergeAll');
+  bm.disabled = pairs === 0 || (!charged && cd > 0);
+  bm.classList.toggle('hot', charged && pairs > 0);
+  bm.classList.toggle('cooling', !charged && cd > 0);
+  // Подпись: заряды → «МАГНИТ», кулдаун → таймер, иначе прогресс до следующего заряда
+  bm.querySelector('.t').textContent = charged ? 'МАГНИТ'
+    : (cd > 0 ? mmss(cd) : (S.mergeStreak|0) + '/' + C.MAGNET_PER_MERGES);
+  const cnt = $('#maCnt');
+  cnt.textContent = charged ? S.magnets : pairs;
+  cnt.classList.toggle('mag', charged);
+  $('#hSnd').textContent = S.sound === false ? '🔇' : '🔊';
+  $('#hSnd').classList.toggle('off', S.sound === false);
+  const rr = $('#reroll');
+  rr.classList.toggle('free', S.rerollLeft > 0);
+  $('#rerollC').textContent = S.rerollLeft > 0 ? 'беспл' : C.REROLL_GEMS + '💎';
+}
+let built = false;
+function sizeBoard(){
+  const wrap = $('#boardWrap'), b = $('#board');
+  if(!wrap || !b || wrap.clientHeight < 60) return;
+  const gap = 5;
+  const w = wrap.clientWidth - 20, h = wrap.clientHeight - 4;
+  const cell = Math.max(30, Math.floor(Math.min(
+    (w - gap*(C.BOARD_COLS-1)) / C.BOARD_COLS,
+    (h - gap*(C.BOARD_ROWS-1)) / C.BOARD_ROWS)));
+  b.style.setProperty('--cell', cell + 'px');
+}
+function buildBoard(){
+  const b = $('#board'); b.innerHTML = '';
+  for(let i=0;i<CELLS;i++){
+    const c = document.createElement('div');
+    c.className = 'cell'; c.dataset.i = i;
+    b.appendChild(c);
+  }
+  built = true; sizeBoard();
+}
+window.addEventListener('resize', sizeBoard);
+if(window.visualViewport) window.visualViewport.addEventListener('resize', sizeBoard);
+function renderBoard(){
+  if(!built) buildBoard();
+  const cells = $('#board').children;
+  for(let i=0;i<CELLS;i++){
+    const cell = cells[i];
+    cell.classList.toggle('locked', !cellOpen(i));
+    const it = S.board[i], cur = cell.firstChild;
+    if(!it){ if(cur) cell.innerHTML = ''; continue; }
+    const rar = rarOf(it.l);
+    const sig = it.l + ':' + (it.ch == null ? '-' : it.ch);   // значок типа и виток выводятся из уровня
+    if(cur && cur.dataset && cur.dataset.sig === sig) continue;
+    const sp = specialOf(it.l), gx = galaxyOf(it.l);
+    cell.innerHTML = '<div class="item r' + (rar+1) + (sp ? ' special' : '') + (gx > 1 ? ' galaxy' : '') + '" data-sig="' + sig +
+      '" style="--rc:var(' + RAR_VAR[rar] + ')">' +
+      emo(it.l) + '<span class="lv">' + it.l + '</span>' +
+      (sp ? '<span class="sp">' + sp.ic + '</span>' : '') +
+      (gx > 1 ? '<span class="gx">' + roman(gx) + '</span>' : '') +
+      (it.ch != null ? '<span class="ch">' + it.ch + '</span>' : '') + '</div>';
+  }
+}
+// Слотов заказов в разметке ВСЕГДА SLOTS_MAX — иначе полоса дёргалась бы
+// при покупке Золотой карты. Лишний слот показываем закрытым.
+function renderOrders(){
+  let h = '';
+  for(let s=0;s<SLOTS_MAX;s++){
+    if(s >= orderSlots()){ h += '<div class="order empty">🔒<br>👑</div>'; continue; }
+    const o = S.orders[s];
+    if(!o){
+      const left = isPremium() ? 0 : Math.max(0, S.orderCdUntil - Date.now());
+      h += '<div class="order empty">' + (left > 0 ? mmss(left) : '…') + '</div>';
+      continue;
+    }
+    h += '<button class="order' + (boardHas(o.l) ? ' ready' : '') + '" data-o="' + s + '">' +
+      '<span class="lvbadge">' + o.l + '</span><span class="em">' + emo(o.l) + '</span>' +
+      '<span class="nm">' + nameOf(o.l) + '</span>' +
+      '<span class="rw">' + fmt(o.coins) + '🪙' + (o.gems ? ' ' + o.gems + '💎' : '') + (o.chest ? ' 📦' : '') + '</span></button>';
+  }
+  $('#orders').innerHTML = h;
+}
+function card(ic,t,d,btn,cls){
+  return '<div class="card' + (cls ? ' '+cls : '') + '"><div class="ci">' + ic + '</div>' +
+    '<div class="cb"><div class="ct">' + t + '</div><div class="cd">' + d + '</div></div>' + (btn||'') + '</div>';
+}
+const gemBtn = id => '<button class="buy gem" data-act="gbuy" data-id="' + id + '">' + GOODS[id].gems + ' 💎</button>';
+
+function renderShop(){
+  let h = '';
+  h += card('💎','У тебя ' + fmt(S.gems) + ' алмазов',
+    'Алмазы — единственная платная валюта. За звёзды покупаются только они.','','gemhero');
+  h += '<h2 class="sec">Паки алмазов</h2>';
+  for(const p of PACKS){
+    h += card(p.em, p.title + ' · ' + p.gems + ' 💎' + (p.bonus ? '<span class="tagline">+' + p.bonus + '%</span>' : ''),
+      (p.gems/p.stars).toFixed(1) + ' алмаза за звезду',
+      '<button class="buy stars" data-act="pack" data-id="' + p.id + '">' + p.stars + ' ⭐</button>',
+      p.stars === 100 ? 'hero' : '');
+  }
+  h += '<h2 class="sec">Бензин для банкомата</h2>';
+  h += card('⚡','Залить под пробку',
+    (S.energy > energyMax() ? 'В баке ' + Math.floor(S.energy) + ' при максимуме ' + energyMax() + ' — излишек не пропадёт'
+                            : 'В баке ' + Math.floor(S.energy) + ' из ' + energyMax()) +
+    '. Само капает по +1 каждые ' + Math.round(regenSec()) + ' сек.', gemBtn('energy_full'));
+  h += card('🔋','Канистра','Доливает ' + (C.ENERGY_CAN_PCT*100) + '% бака — сейчас ' + canEnergy() +
+    ' ⚡. Плещется даже сверх максимума.', gemBtn('energy_30'));
+
+  h += '<h2 class="sec">Нечестные приёмы</h2>';
+  h += card('🤑','Банкомат сошёл с ума',
+    S.drop2Until > Date.now() ? 'Сходит с ума ещё ' + mmss(S.drop2Until-Date.now())
+      : 'Десять минут выплёвывает по две пачки за тап.', gemBtn('boost_drop2'));
+  h += card('🧲','Пять магнитов',
+    'Заряженный магнит слипает всё поле сразу и без ожидания. В запасе: ' + (S.magnets|0) +
+    '. Один заряд и так даётся за каждые ' + C.MAGNET_PER_MERGES + ' слияний руками — сейчас ' +
+    (S.mergeStreak|0) + ' из ' + C.MAGNET_PER_MERGES + '.', gemBtn('magnets_10'));
+
+  h += '<h2 class="sec">Жизнь мажора</h2>';
+  h += card('👑','Золотая карта' + (isPremium() ? '<span class="pill p">в кармане</span>' : ''),
+    isPremium() ? 'Гуляешь до ' + new Date(S.premiumUntil).toLocaleDateString('ru-RU') +
+        '. Когда кончится, бак сдуется на ' + (C.PREM_ENERGY_PCT*100) + '%, накопленное сверху останется.'
+      : 'Бак больше на ' + (C.PREM_ENERGY_PCT*100) + '% — сейчас это +' +
+        Math.round(energyMax()*C.PREM_ENERGY_PCT) + ' ⚡. Плюс вдвое быстрее наливается, четвёртый слот заказа, посылка каждый день и заказы без ожидания. На ' + C.PREM_DAYS + ' дней.',
+    isPremium() ? '<button class="buy" disabled>в кармане</button>' : gemBtn('premium_week'), 'prem');
+
+  h += '<h2 class="sec">Налик</h2>';
+  for(const id of ['coins_1','coins_2']){
+    const left = coinCdLeft(id), g = GOODS[id];
+    const mult = id === 'coins_1' ? 2 : 5;
+    h += card(g.ic, g.title,
+      left > 0 ? 'Следующий раз через ' + mmss(left)
+               : 'Сейчас даст <b style="color:var(--gold)">' + fmt(coinPackAmount(id)) + ' 🪙</b> — баланс ×' + mult + '. Раз в час.',
+      left > 0 ? '<button class="buy" disabled>' + mmss(left) + '</button>' : gemBtn(id));
+  }
+
+  if(S.offers.length || weekendActive() || (!S.starterDone && S.starterUntil > Date.now())){
+    h += '<h2 class="sec">Пока дают</h2>';
+    // Живые предложения: у каждого свой таймер, по истечении исчезает
+    for(let i=0;i<S.offers.length;i++){
+      const o = S.offers[i], tpl = OFFER_POOL.find(x=>x.k === o.k);
+      if(!tpl) continue;
+      h += card(tpl.ic, tpl.t + '<span class="pill o">' + mmss(o.until - Date.now()) + '</span>',
+        tpl.d(),
+        '<button class="buy gem" data-act="offerbuy" data-i="' + i + '">' + tpl.gems + ' 💎</button>', 'hero');
+    }
+    if(weekendActive())
+      h += card('🎪','Загул на выходные<span class="pill o">сб и вс</span>',
+        'Полный бак, три посылки и 40 000 монет.', gemBtn('offer_weekend'), 'hero');
+    if(!S.starterDone && S.starterUntil > Date.now())
+      h += card('🧳','Подъёмные<span class="pill o">' + mmss(S.starterUntil-Date.now()) + '</span>',
+        starterEnergy() + ' энергии, ' + fmt(starterCoins()) + ' 🪙 и сумасшедший банкомат.', gemBtn('offer_starter'), 'hero');
+  }
+  h += '<div class="note">Оплата сейчас: <b>' + (PAY.mode === 'mock' ? 'понарошку' : 'по-настоящему') + '</b>. ' +
+    (PAY.mode === 'mock' ? 'Звёзды не списываются, алмазы начисляются локально — так и задумано, пока не подключён бэкенд.'
+                         : 'Счёт выставляет бот, алмазы зачисляет сервер.') + '</div>';
+  $('#shopBody').innerHTML = h;
+}
+function renderChests(){
+  let h = '';
+  h += '<div class="pitybox">' +
+    '<div class="pt"><span>До жирного улова</span><span>' + S.pity + ' / ' + C.PITY_PULLS + '</span></div>' +
+    '<div class="track"><div class="fill xp" style="width:' + (S.pity/C.PITY_PULLS*100) + '%"></div></div>' +
+    '<div class="odds">' + C.ODDS.map((o,i)=>'<div class="odd"><span class="sw" style="background:var(' + RAR_VAR[i] + ')"></span>' +
+      '<span class="on">' + RARITY[i] + '</span><span class="ov" style="color:var(' + RAR_VAR[i] + ')">' +
+      (o*100).toFixed(o < .05 ? 1 : 0) + '%</span></div>').join('') + '</div>' +
+    '<div class="note" style="margin-bottom:0">Если ' + C.PITY_PULLS + ' раз подряд не повезло — следующая посылка обязана выдать эпик или круче. Вскрыто всего: ' + S.pulls + '.</div></div>';
+
+  if(S.pendingChests > 0)
+    h += card('📮','Пришло бесплатно<span class="pill g">' + S.pendingChests + '</span>','За заказы и уровни.',
+      '<button class="buy coins" data-act="chest-free">Вскрыть' + (S.pendingChests > 1 ? ' всё' : '') + '</button>');
+  if(isPremium() && S.dailyChestDay !== dayKey())
+    h += card('👑','Посылка по подписке','Одна в день, за Золотую карту.',
+      '<button class="buy coins" data-act="chest-daily">Вскрыть</button>','prem');
+
+  h += '<h2 class="sec">Взять ещё</h2>';
+  h += card('📦','Посылка за монеты','Стоит ' + (C.CHEST_PRICE_PCT*100) + '% кошелька — сейчас ' + fmt(chestCoinPrice()) + ' 🪙.',
+    '<button class="buy coins" data-act="chest-coins"' + (S.coins < chestCoinPrice() ? ' disabled' : '') + '>' + fmt(chestCoinPrice()) + ' 🪙</button>');
+  h += card('🎁','Посылка','Одно вскрытие.', gemBtn('chest_1'));
+  h += card('🚚','Фура посылок','Десять вскрытий, все награды покажем списком.', gemBtn('chest_10'));
+
+  h += '<h2 class="sec">Что внутри</h2>';
+  h += '<div class="note">Редкость посылки и редкость предмета внутри — одна и та же. Обычная даёт предмет 1–20 уровня или ' + (C.CHEST_COIN_PCT[0]*100) + '% кошелька. Редкая — предмет 21–40 либо ' + (C.CHEST_COIN_PCT[1]*100) + '% кошелька. Эпическая — 41–60. Легендарная — 61–80 или сумасшедший банкомат. Мифическая — 81–100. Если до этой полосы ты ещё не дошёл, вместо предмета приходят алмазы: 30–50 за редкую, 70–110 за эпическую, 150–220 за легендарную, 300–450 за мифическую. Если на поле нет места, вещь сразу продаётся, и это видно в списке.</div>';
+  $('#chestBody').innerHTML = h;
+}
+function renderTasks(){
+  let h = '';
+  h += '<div class="pitybox"><div class="pt"><span>Сброс банкомата</span><span>заданий: ' + S.questsDone + '</span></div>' +
+    '<div style="display:flex;align-items:center;gap:10px">' +
+    '<div style="font-size:30px">' + emo(genMin()) + '</div>' +
+    '<div style="flex:1;min-width:0"><div style="font-weight:800;font-size:14px">' + nameOf(genMin()) + '</div>' +
+    '<div style="font-size:11px;color:var(--muted);font-weight:700">' +
+      (C.GEN_STEP_QUESTS === 1
+        ? 'Каждое выполненное задание поднимает сброс на уровень. Следующее даст ' + nameOf(genMin()+1)
+        : 'Ещё ' + questsToNextGen() + ' заданий — и банкомат начнёт сыпать ' + nameOf(genMin()+1)) + '</div>' +
+    '<div class="track" style="margin-top:6px"><div class="fill xp" style="width:' +
+      (C.GEN_STEP_QUESTS === 1 ? 100 : (C.GEN_STEP_QUESTS - questsToNextGen())/C.GEN_STEP_QUESTS*100) +
+      '%"></div></div></div></div></div>';
+
+  h += '<h2 class="sec">Задания на этот час</h2>';
+  h += '<div class="pitybox" style="padding:10px 12px;margin-bottom:8px"><div class="pt" style="margin:0">' +
+    '<span>Новый набор через</span><span id="qTimer">' + mmss(nextHourAt() - Date.now()) + '</span></div></div>';
+  for(let i=0;i<(S.quests||[]).length;i++){
+    const q = S.quests[i], def = QUESTS.find(x=>x.id === q.id);
+    const pct = clamp(q.cur/q.goal*100,0,100);
+    h += '<div class="card' + (q.done && !q.claim ? ' done' : '') + '"><div class="ci">' + (q.done ? '✅' : '📋') + '</div>' +
+      '<div class="cb"><div class="ct">' + def.text(q.goal) + '</div>' +
+      '<div class="cd">' + fmt(Math.min(q.cur,q.goal)) + ' из ' + fmt(q.goal) + '</div>' +
+      '<div class="track" style="margin-top:6px"><div class="fill xp" style="width:' + pct + '%"></div></div></div>' +
+      (q.claim ? '<button class="buy gem" data-act="quest" data-i="' + i + '">' + C.QUEST_GEMS + ' 💎</button>'
+               : '<button class="buy" disabled>' + C.QUEST_GEMS + ' 💎</button>') + '</div>';
+  }
+  h += card('🔄','Не нравятся задания?',
+    S.questRerollLeft > 0 ? 'В этом часу можно обновить бесплатно.' : 'Бесплатное обновление уже было. Дальше за алмазы.',
+    '<button class="buy ' + (S.questRerollLeft > 0 ? 'coins' : 'gem') + '" data-act="qreroll">' +
+      (S.questRerollLeft > 0 ? 'Обновить' : C.QUEST_REROLL_GEMS + ' 💎') + '</button>');
+
+  h += '<h2 class="sec">Награды за уровни</h2>';
+  h += '<div class="pitybox" style="padding:10px 12px;margin-bottom:8px"><div class="pt" style="margin:0 0 4px">' +
+    '<span>Уровень ' + S.level + ' из ' + C.MAX_PLAYER_LVL + '</span><span>награда ×' + rewardMult(S.level) + '</span></div>' +
+    '<div style="font-size:11px;color:var(--muted);font-weight:700;line-height:1.45">' +
+    'Бак от уровня: <b>' + energyMax() + '</b> (+' + C.ENERGY_PER_LEVEL + ' за уровень). ' +
+    'Весь опыт умножен на <b>×' + xpMult().toFixed(1) + '</b> — по +' + (C.XP_PER_QUEST_BONUS*100) +
+    '% за каждое из ' + S.questsDone + ' выполненных заданий. ' +
+    'Награда за уровень растёт на ' + (C.LVL_REWARD_BONUS*100) + '% каждые ' + C.LVL_REWARD_STEP +
+    ' уровней, потолок ×' + C.LVL_REWARD_CAP + '.</div></div>';
+  h += '<div class="steps">';
+  const from = Math.max(1, S.level-1), to = Math.min(C.MAX_PLAYER_LVL, from+7);
+  for(let l=from;l<=to;l++){
+    const r = levelReward(l);
+    const cls = l < S.level ? ' got' : (l === S.level ? ' now' : '');
+    h += '<div class="step' + cls + '"><span class="sl">УР ' + l + '</span>' +
+      '<span class="se">' + r.em + '</span><span class="st">' + r.text + '</span></div>';
+  }
+  h += '</div>';
+  h += '<div class="note">Цепочка одна: ' + C.CHAIN_LEN + ' предметов от ' + baseName(1) + ' до ' + baseName(C.CHAIN_LEN) +
+    '. Две Корпорации №1 сливаются в Цент следующего витка — цена продолжает расти, а опыт умножается на ' +
+    C.GALAXY_XP_MULT + '.' +
+    '. Редкость меняется каждые ' + RAR_BAND + ' уровней и множит и цену, и опыт: ' +
+    RARITY.map((n,i)=>n.toLowerCase() + ' ×' + RAR_XP[i]).join(', ') + ' опыта.</div>';
+  $('#taskBody').innerHTML = h;
+}
+function renderLeague(){
+  weeklyPayout();
+  const my = leaguePts(), di = divIndex(my), D = divisions(), div = D[di];
+  const rows = leaderboard(), me = rows.findIndex(r=>r.me);
+  S.league.rank = me; S.league.div = di;              // запоминаем для выплаты в конце недели
+  const maxPts = leagueMax();
+
+  let h = '<div class="divbar">' + D.map((d,i)=>'<div class="d' + (i === di ? ' on' : '') + '">' +
+    d[0].toUpperCase() + '</div>').join('') + '</div>';
+
+  const inDiv = div[2] - div[1], got = clamp(my - div[1], 0, inDiv);
+  h += '<div class="pitybox"><div class="pt"><span>Осталось до раздачи</span><span>' + mmss(endOfWeek()-Date.now()) + '</span></div>' +
+    '<div style="display:flex;justify-content:space-between;align-items:baseline">' +
+    '<div><div style="font-family:var(--disp);font-weight:700;font-size:22px">' + (me+1) + ' место</div>' +
+    '<div style="font-size:11px;color:var(--muted);font-weight:700">' + fmt(my) + ' очков · ' + div[0] + '</div></div>' +
+    '<div style="text-align:right;font-size:11px;color:var(--muted);font-weight:700;line-height:1.5">' +
+    'приз за место<br><b style="color:var(--gem)">' + (prizeFor(me, di) || '—') + ' 💎</b></div></div>' +
+    '<div class="track" style="margin-top:8px"><div class="fill xp" style="width:' + (got/inDiv*100) + '%"></div></div>' +
+    '<div class="note" style="margin-bottom:0">Очки дают только витрины Олигарх, Престиж и Суперпрестиж. ' +
+      'Слияния и заказы очков не приносят. Всего в игре ' + fmt(maxPts+1) + ' очков, у тебя ' + fmt(my) + '.</div></div>';
+
+  h += '<h2 class="sec">Таблица дивизиона</h2>';
+  const show = [];
+  for(let i=0;i<Math.min(15,rows.length);i++) show.push(i);
+  if(me >= 15){ show.push(-1); for(let i=Math.max(15,me-1);i<=Math.min(rows.length-1,me+1);i++) show.push(i); }
+  h += show.map(i=>{
+    if(i === -1) return '<div style="text-align:center;color:var(--dim);font-weight:800;padding:4px">···</div>';
+    const r = rows[i];
+    return '<div class="lgrow' + (r.me ? ' me' : '') + (i < 3 ? ' top'+(i+1) : '') + '">' +
+      '<span class="rk">' + (i+1) + '</span><span class="nm">' + r.name + '</span>' +
+      '<span class="pts">' + fmt(r.pts) + '</span></div>';
+  }).join('');
+
+  h += '<h2 class="sec">Дивизионы</h2>';
+  for(let i=0;i<D.length;i++){
+    const d = D[i];
+    h += '<div class="lgrow' + (i === di ? ' me' : '') + '">' +
+      '<span class="rk" style="width:auto;min-width:58px">' + d[0] + '</span>' +
+      '<span class="nm" style="font-size:11px;color:var(--muted)">от ' + fmt(d[1]) + ' очков</span>' +
+      '<span class="pts">1 место · ' + prizeFor(0,i) + ' 💎</span></div>';
+  }
+
+  h += '<h2 class="sec">Награды за места · ' + div[0] + '</h2>';
+  h += '<div class="steps">';
+  for(let r=0;r<C.LEAGUE_PRIZES.length;r++){
+    h += '<div class="step' + (r === me ? ' now' : '') + '">' +
+      '<span class="sl">' + (r+1) + '</span><span class="se">' + (r < 3 ? ['🥇','🥈','🥉'][r] : '🎁') + '</span>' +
+      '<span class="st">' + prizeFor(r,di) + ' алмазов</span></div>';
+  }
+  h += '</div>';
+
+  h += '<h2 class="sec">Для тестов</h2>';
+  h += card('🧨','Начать заново',
+    'Стирает сейв целиком: уровень, алмазы, монеты, поле, задания, состояние и лигу. Спросит подтверждение.',
+    '<button class="buy danger" data-act="wipe">Рестарт</button>');
+  $('#leagueBody').innerHTML = h;
+}
+let vipTier = 0;
+function renderVip(){
+  const t = vipTier;
+  const owned = S.vip[t].length;
+  let h = '';
+  h += '<div class="vip ' + (t?'t'+t:'') + '" style="margin-bottom:10px">' +
+    '<div class="vi">' + ['🕴️','👑','💠'][t] + '</div><div class="vb">' +
+    '<div class="vt">' + cycleName(t, S.cycle) + '</div>' +
+    '<div class="vd">Собрано ' + owned + ' из ' + C.VIP_COUNT + ' · ' + TIER_FRAME[t] +
+      ' · очков лиги за состояние: ' + fmt(vipBonus()) + '</div>' +
+    '<div class="track" style="margin-top:6px"><div class="fill xp" style="width:' + (owned/C.VIP_COUNT*100) + '%"></div></div>' +
+    '</div></div>';
+  if(!tierOpen(t)){
+    h += '<div class="note">Витрина закрыта. Сначала выкупи всё в разделе «' + TIER_NAME[t-1] + '» — там осталось ' +
+      (C.VIP_COUNT - S.vip[t-1].length) + ' предметов.</div>';
+    $('#vipBody').innerHTML = h;
+    return;
+  }
+  h += '<div class="note" style="margin:0 0 10px">Каждый предмет покупается один раз и даёт очки в лигу. ' +
+    'Когда все три витрины выкуплены, начинается круг ' + roman(S.cycle+1) + ': <b>предметы витрин обнуляются</b> ' +
+    'и открываются заново по ценам выше в ' + fmt(C.CYCLE_PRICE_MULT) + ' раз. ' +
+    'Очки при этом не сгорают — они уходят в банк навсегда, сейчас там ' + fmt(S.ptsBank) + ' очков.</div>';
+  for(let i=0;i<C.VIP_COUNT;i++){
+    const l = vipLvl(i), p = vipPrice(i,t), have = vipOwned(i,t);
+    h += '<div class="vip ' + (t?'t'+t:'') + (have?' owned':'') + '">' +
+      '<span class="vipnum">' + (i+1) + '</span>' +
+      '<div class="vi">' + emo(l) + '</div>' +
+      '<div class="vb"><div class="vt">' + nameOf(l) + (have ? ' ✓' : '') + '</div>' +
+      '<div class="vd">+' + vipPts(i,t) + ' очков · ур. ' + l + '</div></div>' +
+      (have ? '<button class="buy" disabled>куплено</button>'
+            : '<button class="buy coins" data-act="vipbuy" data-i="' + i + '" data-t="' + t + '"' +
+              (S.coins < p ? ' disabled' : '') + '>' + fmt(p) + ' 🪙</button>') +
+      '</div>';
+  }
+  $('#vipBody').innerHTML = h;
+}
+function renderTiers(){
+  const rom = S.cycle > 1 ? ' ' + roman(S.cycle) : '';
+  const short = ['ОЛИГАРХ','ПРЕСТИЖ','СУПЕР'];
+  for(let t=0;t<3;t++){
+    const btn = document.querySelector('.tier[data-tier="' + t + '"]');
+    btn.querySelector('.tn').textContent = short[t] + rom;
+    const open = tierOpen(t);
+    btn.disabled = !open;
+    // Красная точка — когда монет хватает хотя бы на один невыкупленный предмет
+    let can = false;
+    if(open) for(let i=0;i<C.VIP_COUNT;i++) if(!vipOwned(i,t) && S.coins >= vipPrice(i,t)){ can = true; break; }
+    btn.classList.toggle('alert', can);
+    let lock = btn.querySelector('.lock');
+    if(!open && !lock){ lock = document.createElement('span'); lock.className = 'lock'; lock.textContent = '🔒'; btn.appendChild(lock); }
+    if(open && lock) lock.remove();
+  }
+}
+function legalRow(ic,txt){
+  return '<div class="lootrow" style="--lc:var(--line2)"><span class="li">' + ic + '</span>' +
+    '<span class="lt" style="white-space:normal;line-height:1.45">' + txt + '</span></div>';
+}
+function tosSheet(){
+  openSheet('<div class="bigem">📜</div><h3 class="sh-h">Условия использования</h3>' +
+    '<p class="sh-p" style="margin-bottom:8px">' + LEGAL.name + ' · обновлено ' + LEGAL.updated + '</p>' +
+    '<div class="loot" style="max-height:min(52vh,340px)">' +
+    legalRow('🎮','Игра — развлекательный сервис внутри Telegram. Пользуясь ей, ты соглашаешься с этими условиями, ' +
+      'а также с <b>Условиями Telegram для мини-приложений</b> и <b>Условиями Telegram Stars</b>.') +
+    legalRow('🚫','Игра не является азартной. Здесь нет ставок, выигрышей и вывода средств.') +
+    legalRow('💎','Алмазы, монеты, предметы, магниты, витрины состояния и место в лиге — виртуальные объекты ' +
+      'внутри игры. Они не являются деньгами или имуществом, не имеют стоимости вне игры, ' +
+      'не обмениваются на реальные средства и не передаются другим игрокам.') +
+    legalRow('♻️','Витрины состояния обнуляются при переходе на следующий круг престижа — это часть правил игры, ' +
+      'а не потеря имущества. Набранные очки лиги при этом сохраняются.') +
+    legalRow('⭐','За Telegram Stars покупаются только алмазы. Платёж проводит Telegram и его платёжные партнёры. ' +
+      'Мы не видим и не храним данные твоей карты. Условия покупки и возврата звёзд — на стороне Telegram.') +
+    legalRow('↩️','Возврат за уже начисленные и потраченные алмазы не производится, кроме случаев, ' +
+      'когда этого требует закон. Спорные списания — пиши на ' + LEGAL.email + '.') +
+    legalRow('👤','Игра рассчитана на возраст от 13 лет. Если тебе меньше, играй с разрешения родителей. ' +
+      'Покупки за звёзды несовершеннолетним — только с их согласия.') +
+    legalRow('⚖️','Запрещено: изменять клиент, использовать автокликеры и уязвимости, покупать и продавать аккаунты. ' +
+      'За это доступ может быть закрыт без возврата.') +
+    legalRow('🔧','Мы можем менять баланс, цены, содержимое и правила игры, а также приостановить сервис. ' +
+      'Игра предоставляется «как есть», без гарантий бесперебойной работы.') +
+    legalRow('🌍','К отношениям применяется право ' + LEGAL.country + '. Вопросы — ' + LEGAL.email + '.') +
+    '</div>' +
+    '<div class="sh-row"><button class="btn" data-act="help">Назад</button>' +
+    '<button class="btn gr" data-act="close">Закрыть</button></div>');
+}
+function privacySheet(){
+  openSheet('<div class="bigem">🔒</div><h3 class="sh-h">Политика конфиденциальности</h3>' +
+    '<p class="sh-p" style="margin-bottom:8px">' + LEGAL.name + ' · обновлено ' + LEGAL.updated + '</p>' +
+    '<div class="loot" style="max-height:min(52vh,340px)">' +
+    legalRow('🆔','Из Telegram мы получаем то, что передаёт сам мессенджер при запуске: числовой идентификатор, ' +
+      'имя и юзернейм, язык интерфейса. Номер телефона, переписку и контакты мы не получаем.') +
+    legalRow('💾','Прогресс — уровень, монеты, алмазы, поле, задания, состояние и круг престижа — хранится ' +
+      'в CloudStorage Telegram и в памяти твоего устройства, чтобы игра продолжалась на другом телефоне.') +
+    legalRow('⭐','Покупки проводит Telegram. Мы получаем только факт оплаты и её идентификатор, ' +
+      'чтобы начислить алмазы. Реквизиты карты к нам не попадают.') +
+    legalRow('🤝','Мы не продаём данные и не передаём их третьим лицам, кроме случаев, ' +
+      'когда этого требует закон.') +
+    legalRow('🍪','Рекламных трекеров и профилирования в игре нет.') +
+    legalRow('🗑️','Хочешь удалить прогресс — кнопка «Рестарт» внизу вкладки ЛИГА стирает сейв ' +
+      'на устройстве и в облаке. Полное удаление данных со стороны сервера — по письму на ' + LEGAL.email + '.') +
+    legalRow('👶','Мы сознательно не собираем данные детей младше 13 лет. Если это произошло, ' +
+      'напиши нам, и мы удалим их.') +
+    legalRow('✉️','Вопросы по данным — ' + LEGAL.email + '.') +
+    '</div>' +
+    '<div class="sh-row"><button class="btn" data-act="help">Назад</button>' +
+    '<button class="btn gr" data-act="close">Закрыть</button></div>');
+}
+function helpSheet(){
+  openSheet('<div class="bigem">💡</div><h3 class="sh-h">Помощь</h3>' +
+    '<div class="loot" style="max-height:min(52vh,340px)">' +
+    legalRow('🏧','Банкомат сыпет <b>' + nameOf(genMin()) + '</b>. Минимальный сброс поднимают ' +
+      '<b>выполненные задания</b>: ' + (C.GEN_STEP_QUESTS === 1
+        ? 'каждое задание поднимает сброс ровно на один уровень'
+        : 'каждые ' + C.GEN_STEP_QUESTS + ' заданий — плюс один уровень, до следующего роста ' + questsToNextGen()) +
+      '. Заданий ' + C.QUEST_COUNT +
+      ' в наборе, набор меняется каждый час, там же кнопка обновления.') +
+    legalRow('🪙','Монеты дают: <b>заказы</b> сверху — платят в ' + C.ORDER_COIN_MULT +
+      ' раз больше цены предмета, это главный источник; <b>Касса</b> 🏦 на уровнях 25, 50, 75 и 100 — ' +
+      'тап даёт вдвое больше продажи; продажа предмета тапом; посылки. В магазине есть ' +
+      '<b>Мелочь</b> (кошелёк ×2) и <b>Инкассаторский мешок</b> (×5) — каждый раз в час.') +
+    legalRow('⭐','Опыт дают слияния и заказы, он поднимает уровень игрока — всего их ' + C.MAX_PLAYER_LVL +
+      '. Каждый уровень добавляет +' + C.ENERGY_PER_LEVEL + ' к баку и выдаёт награду, а награды растут ' +
+      'на ' + (C.LVL_REWARD_BONUS*100) + '% каждые ' + C.LVL_REWARD_STEP + ' уровней до ×' + C.LVL_REWARD_CAP + '. ' +
+      'Каждое выполненное задание навсегда даёт +' + (C.XP_PER_QUEST_BONUS*100) + '% ко всему опыту, сейчас ×' +
+      xpMult().toFixed(1) + '.') +
+    legalRow('💎','Алмазы падают за задания, часть заказов, уровни игрока, посылки и с Копилки 💎 на поле. ' +
+      'За них берут энергию, бусты, магниты, посылки и Золотую карту. За звёзды покупаются только алмазы.') +
+    legalRow('🧲','Магнит слипает всё поле. Заряд даётся за каждые ' + C.MAGNET_PER_MERGES +
+      ' слияний руками, без заряда — ожидание ' + C.MERGE_ALL_CD_MIN + ' минут. Пачку можно купить за алмазы.') +
+    legalRow('🏭','Особые предметы с зарядами: Станок 🏭 выдаёт вещь попроще, Генератор 🔌 даёт энергию, ' +
+      'Копилка 💎 алмазы, Посылочный 📦 посылку. Тапай по ним.') +
+    legalRow('🎁','В магазине бывает раздел «Пока дают»: ограниченные наборы за алмазы. ' +
+      'Новый приходит каждые ' + C.OFFER_EVERY_MIN + ' минут и на каждый ' + C.OFFER_ON_LEVEL_EVERY +
+      '-й уровень, больше ' + C.OFFER_MAX + ' сразу не висит. У каждого свой таймер — не успел, исчезает.') +
+    legalRow('🌌','Слил две Корпорации №1 — цепочка идёт по новому витку: снова Цент, но 101 уровня. ' +
+      'Названия повторяются, цена продолжает расти без сброса, опыт за слияние умножается на ' +
+      C.GALAXY_XP_MULT + '. Виток отмечен римской цифрой на плитке.') +
+    legalRow('🕴️','Монеты копи на состояние под полем: Олигарх, затем Престиж, затем Суперпрестиж. ' +
+      'Каждый выкупленный предмет добавляет очки в лигу — <b>больше очки взять неоткуда</b>.') +
+    legalRow('♻️','Выкупишь все три витрины — начнётся <b>круг ' + roman(S.cycle+1) + '</b>: ' +
+      'витрины обнулятся и откроются заново как Олигарх ' + roman(S.cycle+1) + ' и дальше. ' +
+      'Цены станут выше в ' + fmt(C.CYCLE_PRICE_MULT) + ' раз, очки за предмет — втрое. ' +
+      'Набранные очки уходят в банк и остаются навсегда. Кругов не ограничено.') +
+    '</div>' +
+    '<div class="sh-row"><button class="btn" data-act="tos">📜 Условия</button>' +
+    '<button class="btn" data-act="privacy">🔒 Данные</button></div>' +
+    '<div class="sh-row"><button class="btn gr" data-act="close">Понял</button></div>');
+}
+let cur = 'game';
+function renderAll(){
+  renderHud();
+  // Полоса заказов живёт ВНЕ экранов и видна на любой вкладке, поэтому
+  // рисуется всегда. Поле скрыто на других вкладках — его только на игре.
+  renderOrders();
+  if(cur === 'game') renderBoard();
+  if(cur === 'task')   renderTasks();
+  if(cur === 'shop')   renderShop();
+  if(cur === 'chest')  renderChests();
+  if(cur === 'league') renderLeague();
+  if(cur === 'vip')    renderVip();
+  renderTiers();
+  renderAlerts();
+}
+function renderAlerts(){
+  document.querySelector('.tab[data-s="task"]').classList.toggle('alert', (S.quests||[]).some(x=>x.claim));
+  document.querySelector('.tab[data-s="shop"]').classList.toggle('alert',
+    S.offers.length > 0 || weekendActive() || (!S.starterDone && S.starterUntil > Date.now()));
+  document.querySelector('.tab[data-s="chest"]').classList.toggle('alert',
+    S.pendingChests > 0 || (isPremium() && S.dailyChestDay !== dayKey()));
+}
+function go(n, tier){
+  cur = n;
+  if(n === 'vip' && tier != null) vipTier = tier;
+  document.querySelectorAll('.screen').forEach(s=>s.classList.toggle('on', s.id === 'scr-'+n));
+  document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('on', t.dataset.s === n));
+  renderAll();
+  if(n === 'game') requestAnimationFrame(sizeBoard);
+}
+
+/* ============ ПЕРЕТАСКИВАНИЕ ============ */
+let drag = null;
+const ghost = $('#ghost');
+function cellAt(x,y){
+  const el = document.elementFromPoint(x,y);
+  const c = el && el.closest ? el.closest('.cell') : null;
+  return c ? +c.dataset.i : -1;
+}
+$('#board').addEventListener('pointerdown', e=>{
+  const cell = e.target.closest('.cell'); if(!cell) return;
+  const i = +cell.dataset.i;
+  if(!S.board[i] || !cellOpen(i)) return;
+  drag = { i, x:e.clientX, y:e.clientY, moved:false };
+  try{ $('#board').setPointerCapture(e.pointerId); }catch(err){}
+});
+$('#board').addEventListener('pointermove', e=>{
+  if(!drag) return;
+  if(!drag.moved && Math.hypot(e.clientX-drag.x, e.clientY-drag.y) < 7) return;
+  if(!drag.moved){
+    drag.moved = true;
+    const src = document.querySelector('.cell[data-i="'+drag.i+'"] .item');
+    if(src){
+      ghost.innerHTML = src.outerHTML;
+      const r = src.getBoundingClientRect(), g = ghost.firstChild;
+      g.style.width = r.width+'px'; g.style.height = r.height+'px';
+      ghost.style.display = 'block'; src.classList.add('dragging');
+    }
+  }
+  ghost.style.left = e.clientX+'px'; ghost.style.top = (e.clientY-26)+'px';
+  const over = cellAt(e.clientX, e.clientY-26);
+  document.querySelectorAll('.cell.over').forEach(c=>c.classList.remove('over'));
+  if(over >= 0 && over !== drag.i && cellOpen(over))
+    document.querySelector('.cell[data-i="'+over+'"]').classList.add('over');
+});
+$('#board').addEventListener('pointerup', e=>{
+  if(!drag) return;
+  const d = drag; drag = null;
+  ghost.style.display = 'none'; ghost.innerHTML = '';
+  document.querySelectorAll('.cell.over').forEach(c=>c.classList.remove('over'));
+  const src = document.querySelector('.cell[data-i="'+d.i+'"] .item');
+  if(src) src.classList.remove('dragging');
+  if(!d.moved){ tapCell(d.i); return; }
+  const to = cellAt(e.clientX, e.clientY-26);
+  if(to < 0 || to === d.i || !cellOpen(to)){ renderBoard(); return; }
+  if(!tryMerge(d.i,to)){
+    const t = S.board[to]; S.board[to] = S.board[d.i]; S.board[d.i] = t;
+    renderAll(); save();
+  }
+});
+$('#board').addEventListener('pointercancel', ()=>{
+  drag = null; ghost.style.display = 'none';
+  document.querySelectorAll('.cell.over').forEach(c=>c.classList.remove('over'));
+  renderBoard();
+});
+function tapCell(i){
+  const it = S.board[i]; if(!it) return;
+  const sp = specialOf(it.l);
+  if(sp && it.ch != null && it.ch > 0){
+    if(sp.type === 'producer'){
+      if(countFree() <= 0){ toast('Класть некуда'); SFX.err(); haptic('err'); return; }
+      const ni = spawn(Math.max(1, it.l - C.PRODUCER_BACK));
+      if(ni >= 0) popCell(ni);
+      SFX.tap();
+    } else if(sp.type === 'safe'){
+      const n = price(it.l) * C.SAFE_MULT;
+      S.coins += n; quest('coins', n);
+      toast('Касса: +' + fmt(n) + ' 🪙'); SFX.coin();
+    } else if(sp.type === 'energy'){
+      if(S.energy >= energyMax()) S.enTs = Date.now();
+      S.energy += specialEnergy();
+      toast('Генератор: +' + specialEnergy() + ' ⚡'); SFX.gem();
+    } else if(sp.type === 'gems'){
+      S.gems += C.SPECIAL_GEMS;
+      toast('Копилка: +' + C.SPECIAL_GEMS + ' 💎'); SFX.gem();
+    } else if(sp.type === 'chest'){
+      S.pendingChests++;
+      toast('Посылка приехала, вскрой во вкладке'); SFX.gem();
+    }
+    it.ch--;
+    if(it.ch <= 0) S.board[i] = null;
+    haptic('light');
+    renderAll(); save(); return;
+  }
+  itemSheet(i);
+}
+
+/* ============ КЛИКИ ============ */
+$('#gen').addEventListener('click', genTap);
+$('#btnMergeAll').addEventListener('click', mergeAll);
+$('#btnHelp').addEventListener('click', helpSheet);
+document.querySelectorAll('.tier').forEach(b=>b.addEventListener('click', ()=>{
+  const t = +b.dataset.tier;
+  if(!tierOpen(t)){ toast('Сначала выкупи всё в разделе «' + TIER_NAME[t-1] + '»'); SFX.err(); haptic('err'); return; }
+  go('vip', t);
+}));
+$('#reroll').addEventListener('click', rerollOrders);
+$('#orders').addEventListener('click', e=>{ const b = e.target.closest('[data-o]'); if(b) completeOrder(+b.dataset.o); });
+$('#hGemBtn').addEventListener('click', ()=>go('shop'));
+$('#hSnd').addEventListener('click', ()=>{ S.sound = S.sound === false; if(S.sound) SFX.gem(); renderHud(); save(); });
+document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click', ()=>go(t.dataset.s)));
+$('#veil').addEventListener('click', e=>{ if(e.target === $('#veil')) closeSheet(); });
+document.addEventListener('click', e=>{
+  const b = e.target.closest('[data-act]'); if(!b) return;
+  const a = b.dataset.act, inSheet = !!b.closest('#veil');
+  switch(a){
+    case 'close': closeSheet(); return;
+    case 'yes': $('#veil').classList.remove('on'); if(askRes){ askRes(true); askRes = null; } return;
+    case 'no': closeSheet(); return;
+    case 'toshop': closeSheet(); go('shop'); return;
+    case 'pack': PAY.buy(b.dataset.id); return;
+    case 'gbuy': { const id = b.dataset.id; if(inSheet) $('#veil').classList.remove('on'); gemBuy(id); return; }
+    case 'sell': {
+      const i = +b.dataset.i, it = S.board[i];
+      if(it){ const p = price(it.l); S.coins += p; S.board[i] = null; quest('coins', p);
+              toast('Сбагрил за ' + fmt(p) + ' 🪙'); SFX.coin(); haptic('ok'); }
+      closeSheet(); renderAll(); save(); return;
+    }
+    case 'chest-coins': {
+      const p = chestCoinPrice();
+      if(S.coins < p){ toast('Монет не хватает'); SFX.err(); return; }
+      S.coins -= p; openChests(1); return;
+    }
+    case 'chest-free': {
+      const n = S.pendingChests; if(n <= 0) return;
+      S.pendingChests = 0; openChests(n); return;
+    }
+    case 'chest-daily':
+      if(!isPremium() || S.dailyChestDay === dayKey()) return;
+      S.dailyChestDay = dayKey(); openChests(1); return;
+    case 'quest': claimQuest(+b.dataset.i); return;
+    case 'qreroll': rerollQuests(); return;
+    case 'vipbuy': vipBuy(+b.dataset.i, +b.dataset.t); return;
+    case 'offerbuy': offerBuy(+b.dataset.i); return;
+    case 'help':    helpSheet(); return;
+    case 'tos':     tosSheet(); return;
+    case 'privacy': privacySheet(); return;
+    case 'wipe': wipeSave(); return;
+  }
+});
+
+/* ============ ЦИКЛ ============ */
+function loop(){
+  tickEnergy();
+  const hadHour = S.hour;
+  rollHour();
+  if(hadHour !== S.hour && cur === 'task') renderTasks();   // час сменился — перерисуем список
+  const qt = document.getElementById('qTimer');
+  if(qt) qt.textContent = mmss(nextHourAt() - Date.now());
+  const got = tickOrders();
+  renderHud();
+  // Таймеры пустых слотов тикают на любой вкладке — полоса заказов видна всегда
+  if(got) renderOrders();
+  else {
+    const em = document.querySelectorAll('#orders .order.empty');
+    const l = Math.max(0, S.orderCdUntil - Date.now());
+    em.forEach(e=>{ if(e.textContent.indexOf('🔒') < 0) e.textContent = l > 0 ? mmss(l) : '…'; });
+  }
+  const offersChanged = tickOffers();
+  if(cur === 'shop' && (offersChanged || S.offers.length || S.starterUntil > Date.now()
+      || S.drop2Until > Date.now() || coinCdLeft('coins_1') > 0 || coinCdLeft('coins_2') > 0)) renderShop();
+  if(cur === 'league'){ const t = document.querySelector('#leagueBody .pt span:last-child'); if(t) t.textContent = mmss(endOfWeek()-Date.now()); }
+  renderAlerts();
+  const st = document.getElementById('stTimer');
+  if(st) st.textContent = 'Предложение исчезнет через ' + mmss(S.starterUntil - Date.now());
+}
+
+/* ============ СТАРТ ============ */
+function boot(){
+  loadLocal();
+  applyOffline();
+  rollDay();
+  weeklyPayout();   // при смене недели выдаём приз за место прошлой недели
+  S.rows = Math.max(S.rows, rowsMax());
+  fillOrders();
+  if(!S.offerNextAt) S.offerNextAt = Date.now() + 60000;   // первое предложение через минуту
+  buildBoard();
+  S.tut = true;                  // первый запуск тоже начинается с пустого поля
+  go('game');
+  requestAnimationFrame(sizeBoard);
+  loadCloud();
+  setInterval(loop, 1000);
+  save();
+  if(weekendActive()) setTimeout(()=>openSheet(
+    '<div class="bigem">🎪</div><h3 class="sh-h">Загул на выходные</h3>' +
+    '<p class="sh-p">Полный бак, три посылки и ' + fmt(weekendCoins()) + ' 🪙. Лавочка работает только в субботу и воскресенье, и только один раз.</p>' +
+    '<div class="sh-row"><button class="btn" data-act="close">Не сейчас</button>' +
+    '<button class="btn pri" data-act="gbuy" data-id="offer_weekend">' + C.OFFER_WEEKEND_GEMS + ' 💎</button></div>'), 1200);
+}
+boot();
+
+</script>
+
+</body>
+</html>
