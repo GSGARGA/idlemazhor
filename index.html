@@ -411,7 +411,7 @@ h2.sec:first-child{margin-top:0}
 
 /* ============ БЛОК КОНСТАНТ (весь баланс здесь) ============ */
 const C = {
-  SAVE_VERSION:      21,      // версия сейва; при росте запускается migrate()
+  SAVE_VERSION:      22,      // версия сейва; при росте запускается migrate()
   SAVE_KEY:          'bvs_save',
   SAVE_DEBOUNCE_MS:  700,    // задержка перед записью сейва
 
@@ -510,6 +510,7 @@ const C = {
   CHEST_COIN_PRICE:  2500,   // нижняя цена посылки за монеты, если кошелёк тощий
   CHEST_GEMS:        [[0,0],[15,25],[35,55],[75,110],[150,225]], // алмазы из посылки по редкости
   CHEST_COIN_GEM_MAX: 10,    // потолок алмазов из посылки, купленной за монеты
+  CHEST_ITEM_GEM_DIV: 3,     // во столько раз меньше алмазов из посылок с заряженных предметов
   PITY_PULLS:        12,     // вскрытий до гарантии редкого и выше
   ODDS:              [0.50,0.27,0.15,0.06,0.02], // шансы редкостей, ровно эти числа показываем
 
@@ -821,6 +822,7 @@ function fresh(){
     drop2Until:0, mergeAllUntil:0,
     premiumUntil:0,
     pity:0, pulls:0, pendingChests:0,
+    itemChests:0,          // посылки, добытые с заряженных предметов — считаются отдельно
     magnets:0, mergeStreak:0,   // заряды магнита и счётчик ручных слияний до следующего
     coinCd:{},                  // до какого времени пакеты монет на кулдауне
     galaxySeen:1,               // до какого витка цепочки уже показывали поздравление
@@ -904,6 +906,7 @@ function migrate(raw){
   if(!Array.isArray(s.vip) || s.vip.length !== 3) s.vip = [[],[],[]];
   s.vip = s.vip.map(a=>Array.isArray(a) ? a.filter(n=>Number.isInteger(n) && n >= 0 && n < C.VIP_COUNT) : []);
   s.boughtApplied = Math.max(0, s.boughtApplied|0);   // v19 → v20: счётчик покупок за звёзды
+  s.itemChests = Math.max(0, s.itemChests|0);        // v21 → v22: посылки с предметов отдельно
   s.payPending = Math.max(0, +s.payPending || 0);
   if(typeof s.payPack !== 'string') s.payPack = '';
   s.magnets = Math.max(0, s.magnets|0);
@@ -1599,14 +1602,20 @@ function rewardLine(rar, rw){
     '<span class="li">' + ic + '</span><span class="lt">' + tx + '</span>' +
     '<span class="lr">' + RARITY[rar] + '</span></div>';
 }
-/* forCoins — посылка куплена за монеты. Такие посылки не должны быть
-   источником алмазов: их можно брать бесконечно, пока хватает кошелька,
-   поэтому алмазную награду режем до CHEST_COIN_GEM_MAX. */
-function openChests(n, forCoins){
+/* src — откуда посылка:
+     'coins' куплена за монеты — берётся бесконечно, пока хватает кошелька,
+             поэтому алмазы режем до CHEST_COIN_GEM_MAX;
+     'item'  добыта с заряженного предмета — их тоже много,
+             алмазы делим на CHEST_ITEM_GEM_DIV;
+     иначе   посылка за задания, уровни и покупки — награда как есть. */
+function openChests(n, src){
   const got = []; let best = 0;
   for(let i=0;i<n;i++){
     const rar = rollRarity(), rw = chestReward(rar);
-    if(forCoins && rw.kind === 'gems') rw.n = Math.min(rw.n, C.CHEST_COIN_GEM_MAX);
+    if(rw.kind === 'gems'){
+      if(src === 'coins') rw.n = Math.min(rw.n, C.CHEST_COIN_GEM_MAX);
+      if(src === 'item')  rw.n = Math.max(1, Math.round(rw.n / C.CHEST_ITEM_GEM_DIV));
+    }
     applyReward(rw); got.push({rar,rw});
     if(rar > best) best = rar;
   }
@@ -2071,8 +2080,13 @@ function renderChests(){
     '<div class="note" style="margin-bottom:0">Если ' + C.PITY_PULLS + ' раз подряд не повезло — следующая посылка обязана выдать эпик или круче. Вскрыто всего: ' + S.pulls + '.</div></div>';
 
   if(S.pendingChests > 0)
-    h += card('📮','Пришло бесплатно<span class="pill g">' + S.pendingChests + '</span>','За заказы и уровни.',
+    h += card('📮','Посылки за задания<span class="pill g">' + S.pendingChests + '</span>',
+      'Пришли за заказы, задания и уровни. Награда полная.',
       '<button class="buy coins" data-act="chest-free">Вскрыть' + (S.pendingChests > 1 ? ' всё' : '') + '</button>');
+  if(S.itemChests > 0)
+    h += card('🧰','Посылки за предметы<span class="pill g">' + S.itemChests + '</span>',
+      'Собраны с заряженных вещей на поле. Алмазов в них втрое меньше.',
+      '<button class="buy coins" data-act="chest-item">Вскрыть' + (S.itemChests > 1 ? ' всё' : '') + '</button>');
   if(isPremium() && S.dailyChestDay !== dayKey())
     h += card('👑','Посылка по подписке','Одна в день, за Золотую карту.',
       '<button class="buy coins" data-act="chest-daily">Вскрыть</button>','prem');
@@ -2085,7 +2099,7 @@ function renderChests(){
   h += card('🚚','Фура посылок','Десять вскрытий, все награды покажем списком.', gemBtn('chest_10'));
 
   h += '<h2 class="sec">Что внутри</h2>';
-  h += '<div class="note">Редкость посылки и редкость предмета внутри — одна и та же. Обычная даёт предмет 1–20 уровня или ' + (C.CHEST_COIN_PCT[0]*100) + '% кошелька. Редкая — предмет 21–40 либо ' + (C.CHEST_COIN_PCT[1]*100) + '% кошелька. Эпическая — 41–60. Легендарная — 61–80 или сумасшедший банкомат. Мифическая — 81–100. Если до этой полосы ты ещё не дошёл, вместо предмета приходят алмазы: ' + C.CHEST_GEMS[1][0] + '–' + C.CHEST_GEMS[1][1] + ' за редкую, ' + C.CHEST_GEMS[2][0] + '–' + C.CHEST_GEMS[2][1] + ' за эпическую, ' + C.CHEST_GEMS[3][0] + '–' + C.CHEST_GEMS[3][1] + ' за легендарную, ' + C.CHEST_GEMS[4][0] + '–' + C.CHEST_GEMS[4][1] + ' за мифическую. Из посылки за монеты — не больше ' + C.CHEST_COIN_GEM_MAX + '. Если на поле нет места, вещь сразу продаётся, и это видно в списке.</div>';
+  h += '<div class="note">Редкость посылки и редкость предмета внутри — одна и та же. Обычная даёт предмет 1–20 уровня или ' + (C.CHEST_COIN_PCT[0]*100) + '% кошелька. Редкая — предмет 21–40 либо ' + (C.CHEST_COIN_PCT[1]*100) + '% кошелька. Эпическая — 41–60. Легендарная — 61–80 или сумасшедший банкомат. Мифическая — 81–100. Если до этой полосы ты ещё не дошёл, вместо предмета приходят алмазы: ' + C.CHEST_GEMS[1][0] + '–' + C.CHEST_GEMS[1][1] + ' за редкую, ' + C.CHEST_GEMS[2][0] + '–' + C.CHEST_GEMS[2][1] + ' за эпическую, ' + C.CHEST_GEMS[3][0] + '–' + C.CHEST_GEMS[3][1] + ' за легендарную, ' + C.CHEST_GEMS[4][0] + '–' + C.CHEST_GEMS[4][1] + ' за мифическую. Из посылки за монеты — не больше ' + C.CHEST_COIN_GEM_MAX + ', из посылки за предметы — втрое меньше. Если на поле нет места, вещь сразу продаётся, и это видно в списке.</div>';
   $('#chestBody').innerHTML = h;
 }
 function renderTasks(){
@@ -2374,7 +2388,7 @@ function renderAlerts(){
   document.querySelector('.tab[data-s="shop"]').classList.toggle('alert',
     S.offers.length > 0 || weekendActive() || (!S.starterDone && S.starterUntil > Date.now()));
   document.querySelector('.tab[data-s="chest"]').classList.toggle('alert',
-    S.pendingChests > 0 || (isPremium() && S.dailyChestDay !== dayKey()));
+    S.pendingChests > 0 || S.itemChests > 0 || (isPremium() && S.dailyChestDay !== dayKey()));
 }
 function go(n, tier){
   cur = n;
@@ -2460,8 +2474,8 @@ function tapCell(i){
       S.gems += C.SPECIAL_GEMS;
       toast('Копилка: +' + C.SPECIAL_GEMS + ' 💎'); SFX.gem();
     } else if(sp.type === 'chest'){
-      S.pendingChests++;
-      toast('Посылка приехала, вскрой во вкладке'); SFX.gem();
+      S.itemChests++;
+      toast('Посылка с предмета, вскрой во вкладке'); SFX.gem();
     }
     it.ch--;
     if(it.ch <= 0) S.board[i] = null;
@@ -2505,11 +2519,15 @@ document.addEventListener('click', e=>{
     case 'chest-coins': {
       const p = chestCoinPrice();
       if(S.coins < p){ toast('Монет не хватает'); SFX.err(); return; }
-      S.coins -= p; openChests(1, true); return;
+      S.coins -= p; openChests(1, 'coins'); return;
     }
     case 'chest-free': {
       const n = S.pendingChests; if(n <= 0) return;
       S.pendingChests = 0; openChests(n); return;
+    }
+    case 'chest-item': {
+      const n = S.itemChests; if(n <= 0) return;
+      S.itemChests = 0; openChests(n, 'item'); return;
     }
     case 'chest-daily':
       if(!isPremium() || S.dailyChestDay === dayKey()) return;
