@@ -1,0 +1,148 @@
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#111;font-family:'DejaVu Sans',sans-serif}
+.art{position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center}
+
+/* ---------- фон: ночной обменник, как в игре ---------- */
+.bg{position:absolute;inset:0;background:
+    radial-gradient(115% 95% at 50% 16%, #22456F 0%, #16263F 42%, #0A0E13 100%)}
+.rays{position:absolute;inset:-35%;background:
+    repeating-conic-gradient(from 0deg at 50% 44%,
+      rgba(255,206,61,.13) 0deg 6deg, transparent 6deg 19deg);
+    filter:blur(.6px)}
+.glow{position:absolute;left:50%;top:46%;transform:translate(-50%,-50%);
+    width:84%;aspect-ratio:1;border-radius:50%;
+    background:radial-gradient(circle, rgba(255,206,61,.45) 0%, rgba(255,206,61,0) 60%)}
+.vig{position:absolute;inset:0;background:
+    radial-gradient(118% 100% at 50% 50%, transparent 42%, rgba(0,0,0,.6) 100%)}
+
+/* ---------- монета ---------- */
+.coin{position:relative;border-radius:50%;
+  background:linear-gradient(158deg,#FFF4B6 0%,#FFD23D 22%,#E7A400 52%,#A96F00 78%,#FFE585 100%);
+  box-shadow:0 0 0 var(--rim) #7A4E00,
+             0 0 0 calc(var(--rim) + var(--rim2)) #FFE07A,
+             0 var(--dy) var(--bl) rgba(0,0,0,.62),
+             inset 0 var(--in) 0 rgba(255,255,255,.5)}
+.coin::after{content:'';position:absolute;inset:11%;border-radius:50%;
+  border:var(--ring) solid rgba(122,78,0,.42)}
+.coin b{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  font-weight:700;color:#6B4400;text-shadow:0 var(--ts) 0 rgba(255,255,255,.5);
+  letter-spacing:-.04em;line-height:1}
+.shine{position:absolute;left:9%;top:7%;width:42%;height:26%;border-radius:50%;
+  background:linear-gradient(180deg,rgba(255,255,255,.78),rgba(255,255,255,0));
+  transform:rotate(-18deg);filter:blur(1px)}
+
+.crown{position:absolute;left:50%;transform:translateX(-50%)}
+.crown svg{display:block;filter:drop-shadow(0 5px 7px rgba(0,0,0,.6))}
+
+/* ---------- текст ---------- */
+.word{font-weight:700;letter-spacing:.01em;line-height:.92;text-align:center;
+  background:linear-gradient(180deg,#FFF8CE 0%,#FFD23D 44%,#D89400 100%);
+  -webkit-background-clip:text;background-clip:text;color:transparent;
+  filter:drop-shadow(0 3px 0 #5A3A00) drop-shadow(0 9px 16px rgba(0,0,0,.62))}
+.sub{color:#A6CDEC;font-weight:700;letter-spacing:.15em;text-transform:uppercase}
+.chip{background:#1B2735;border:1.5px solid #3A5068;color:#A6CDEC;
+  font-weight:700;border-radius:99px;white-space:nowrap}
+.chip.g{background:#2B2415;border-color:#B98700;color:#FFD23D}
+</style>
+
+<!-- шаблон короны -->
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <linearGradient id="cg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFF6C8"/><stop offset=".45" stop-color="#FFD23D"/>
+      <stop offset="1" stop-color="#C98A00"/>
+    </linearGradient>
+    <symbol id="crown" viewBox="0 0 88 48">
+      <path d="M6 44 L2 10 L22 24 L44 2 L66 24 L86 10 L82 44 Z"
+            fill="url(#cg)" stroke="#7A4E00" stroke-width="2.6" stroke-linejoin="round"/>
+      <circle cx="44" cy="13" r="4.6" fill="#FF6B4A" stroke="#7A4E00" stroke-width="1.7"/>
+      <circle cx="8"  cy="15" r="3.3" fill="#5BD5FF" stroke="#7A4E00" stroke-width="1.5"/>
+      <circle cx="80" cy="15" r="3.3" fill="#5BD5FF" stroke="#7A4E00" stroke-width="1.5"/>
+    </symbol>
+  </defs>
+</svg>
+
+<!-- ============ ИКОНКА 512 (аватар бота, кроп в круг) ============ -->
+<div class="art" id="icon" style="width:512px;height:512px">
+  <div class="bg"></div><div class="rays"></div><div class="glow"></div>
+  <div style="position:relative;margin-top:16px">
+    <div class="crown" style="top:-84px;position:absolute">
+      <svg width="196" height="107"><use href="#crown"/></svg>
+    </div>
+    <div class="coin" style="width:296px;height:296px;--rim:8px;--rim2:6px;--dy:18px;--bl:32px;--in:9px;--ring:8px;--ts:3px">
+      <div class="shine"></div>
+      <b style="font-size:186px">М</b>
+    </div>
+  </div>
+  <div class="vig"></div>
+</div>
+
+<!-- ============ ПРЕВЬЮ 640×360 для BotFather ============ -->
+<div class="art" id="prev" style="width:640px;height:360px">
+  <div class="bg"></div><div class="rays"></div>
+  <div class="glow" style="left:25%;top:52%;width:56%"></div>
+  <div style="position:relative;display:flex;align-items:center;gap:28px;padding:0 40px;width:100%">
+    <div style="position:relative;flex:0 0 auto">
+      <div class="crown" style="top:-40px;position:absolute">
+        <svg width="106" height="58"><use href="#crown"/></svg>
+      </div>
+      <div class="coin" style="width:160px;height:160px;--rim:5px;--rim2:4px;--dy:12px;--bl:22px;--in:7px;--ring:6px;--ts:2px">
+        <div class="shine"></div><b style="font-size:100px">М</b>
+      </div>
+    </div>
+    <div style="text-align:left">
+      <div class="word" style="font-size:80px;text-align:left;white-space:nowrap">МАЖОР</div>
+      <div class="sub" style="font-size:16px;margin-top:14px;white-space:nowrap">от цента до корпорации</div>
+      <div style="display:flex;gap:9px;margin-top:18px">
+        <span class="chip" style="font-size:13px;padding:6px 13px">500 уровней</span>
+        <span class="chip g" style="font-size:13px;padding:6px 13px">мерж-2</span>
+      </div>
+    </div>
+  </div>
+  <div class="vig"></div>
+</div>
+
+<!-- ============ БАННЕР 1280×720 ============ -->
+<div class="art" id="ban" style="width:1280px;height:720px">
+  <div class="bg"></div><div class="rays"></div><div class="glow" style="top:40%"></div>
+  <div style="position:relative;display:flex;flex-direction:column;align-items:center;padding-top:84px">
+    <div style="position:relative">
+      <div class="crown" style="top:-84px;position:absolute">
+        <svg width="214" height="117"><use href="#crown"/></svg>
+      </div>
+      <div class="coin" style="width:258px;height:258px;--rim:8px;--rim2:6px;--dy:18px;--bl:34px;--in:9px;--ring:8px;--ts:3px">
+        <div class="shine"></div><b style="font-size:164px">М</b>
+      </div>
+    </div>
+    <div class="word" style="font-size:126px;margin-top:28px;white-space:nowrap">МАЖОР</div>
+    <div class="sub" style="font-size:27px;margin-top:14px">от цента до корпорации</div>
+    <div style="display:flex;gap:14px;margin-top:28px">
+      <span class="chip" style="font-size:20px;padding:10px 22px">500 уровней</span>
+      <span class="chip g" style="font-size:20px;padding:10px 22px">мерж-2</span>
+      <span class="chip" style="font-size:20px;padding:10px 22px">лиги и престиж</span>
+    </div>
+  </div>
+  <div class="vig"></div>
+</div>
+
+<!-- ============ ШИРОКАЯ ШАПКА 1280×400 (для канала/поста) ============ -->
+<div class="art" id="wide" style="width:1280px;height:400px">
+  <div class="bg"></div><div class="rays"></div>
+  <div class="glow" style="left:22%;top:52%;width:46%"></div>
+  <div style="position:relative;display:flex;align-items:center;gap:52px;padding:0 90px;width:100%">
+    <div style="position:relative;flex:0 0 auto">
+      <div class="crown" style="top:-56px;position:absolute">
+        <svg width="150" height="82"><use href="#crown"/></svg>
+      </div>
+      <div class="coin" style="width:224px;height:224px;--rim:7px;--rim2:5px;--dy:15px;--bl:28px;--in:8px;--ring:7px;--ts:3px">
+        <div class="shine"></div><b style="font-size:142px">М</b>
+      </div>
+    </div>
+    <div style="text-align:left">
+      <div class="word" style="font-size:112px;text-align:left;white-space:nowrap">МАЖОР</div>
+      <div class="sub" style="font-size:22px;margin-top:16px;white-space:nowrap">от цента до корпорации</div>
+    </div>
+  </div>
+  <div class="vig"></div>
+</div>
