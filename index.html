@@ -398,7 +398,7 @@ h2.sec:first-child{margin-top:0}
 
 /* ============ БЛОК КОНСТАНТ (весь баланс здесь) ============ */
 const C = {
-  SAVE_VERSION:      19,      // версия сейва; при росте запускается migrate()
+  SAVE_VERSION:      20,      // версия сейва; при росте запускается migrate()
   SAVE_KEY:          'bvs_save',
   SAVE_DEBOUNCE_MS:  700,    // задержка перед записью сейва
 
@@ -590,8 +590,8 @@ const PACKS = [
    live — идём в бэкенд, начисляет сервер по вебхуку.
    ===================================================================== */
 const PAY = {
-  mode: 'mock',
-  backend: '',
+  mode: 'live',                                          // боевой режим: звёзды списываются по-настоящему
+  backend: 'https://mazhor-pay.vertoprah02.workers.dev', // сервер оплаты на Cloudflare
   async buy(packId){
     const p = PACKS.find(x=>x.id === packId);
     if(!p) return;
@@ -623,7 +623,15 @@ async function pullServer(){
       headers:{'Content-Type':'application/json'},
       body: JSON.stringify({ initData:(tg && tg.initData) || '' })});
     const d = await r.json();
-    if(d.gems != null) S.gems = d.gems;   // алмазы — источник правды на сервере
+    /* Сервер считает только купленное за звёзды: сколько всего алмазов человек
+       оплатил за всё время. Заработанное игрой он не видит и не трогает.
+       В игру добавляем разницу между этим числом и тем, что уже зачислено —
+       так покупка не потеряется, но и не начислится дважды. */
+    if(d.bought != null){
+      const diff = (d.bought|0) - (S.boughtApplied|0);
+      if(diff > 0) S.gems += diff;
+      S.boughtApplied = d.bought|0;
+    }
     renderAll(); save();
   }catch(e){}
 }
@@ -723,6 +731,7 @@ function fresh(){
     board:new Array(CELLS).fill(null),  // {l:уровень, ch:заряды|null}
     rows:C.ROWS_START,
     coins:0, gems:0,       // на старте пусто — и монеты, и алмазы зарабатываются
+    boughtApplied:0,       // сколько купленных за звёзды алмазов уже зачислено в игру
     level:1, xp:0, lvlTaken:1,
     energy:C.ENERGY_MAX, enTs:Date.now(),
     orders:[], orderCdUntil:0,
@@ -804,6 +813,7 @@ function migrate(raw){
   s.ptsBank = Math.max(0, s.ptsBank|0);
   if(!Array.isArray(s.vip) || s.vip.length !== 3) s.vip = [[],[],[]];
   s.vip = s.vip.map(a=>Array.isArray(a) ? a.filter(n=>Number.isInteger(n) && n >= 0 && n < C.VIP_COUNT) : []);
+  s.boughtApplied = Math.max(0, s.boughtApplied|0);   // v19 → v20: счётчик покупок за звёзды
   s.magnets = Math.max(0, s.magnets|0);
   s.mergeStreak = clamp(s.mergeStreak|0, 0, C.MAGNET_PER_MERGES-1);
   if(!Array.isArray(s.orders)) s.orders = [];
@@ -2396,6 +2406,7 @@ function boot(){
   go('game');
   requestAnimationFrame(sizeBoard);
   loadCloud();
+  pullServer();                  // вдруг платёж прошёл, пока игра была закрыта
   setInterval(loop, 1000);
   save();
   if(weekendActive()) setTimeout(()=>openSheet(
