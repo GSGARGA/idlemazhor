@@ -84,7 +84,11 @@ button{font:inherit;color:inherit;border:0;background:none;cursor:pointer}
   padding:4px 3px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;
   position:relative;overflow:hidden}
 .order.ready{border-color:var(--green);box-shadow:0 0 0 1px var(--green) inset}
-.order .em{font-size:24px;line-height:1}
+.order .em{font-size:24px;line-height:1;position:relative;
+  filter:drop-shadow(0 1px 3px rgba(0,0,0,.9))}
+.order .em::before{content:'';position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+  width:150%;height:150%;border-radius:50%;z-index:-1;
+  background:radial-gradient(circle, var(--lc,transparent) 0%, transparent 64%);opacity:.36}
 .order .nm{font-size:8.5px;color:var(--muted);font-weight:700;text-align:center;line-height:1.1;
   max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .order .rw{font-size:10px;font-weight:800;color:var(--gold)}
@@ -114,12 +118,21 @@ main{flex:1;min-height:0;position:relative}
 .cell.hint{animation:hintp 1s ease-in-out 3}
 @keyframes hintp{0%,100%{box-shadow:0 0 0 0 rgba(79,201,138,0)}50%{box-shadow:0 0 0 3px rgba(79,201,138,.55) inset}}
 .item{width:100%;height:100%;border-radius:11px;display:flex;align-items:center;justify-content:center;
-  position:relative;background:linear-gradient(180deg,var(--panel2),var(--panel));
+  position:relative;background:linear-gradient(180deg,var(--b1,var(--panel2)),var(--b2,var(--panel)));
   border:2px solid var(--rc,var(--r1));
   box-shadow:0 3px 0 rgba(0,0,0,.4), 0 0 14px -7px var(--rc,var(--r1));
   font-size:calc(var(--cell,60px) * .54);line-height:1}
 .item .lv{position:absolute;bottom:0;right:4px;font-size:calc(var(--cell,60px) * .2);font-weight:800;
   color:var(--rc,var(--r1));font-family:var(--disp)}
+/* Подсветка под значком. Оттенок свой на каждый уровень (--lc ставит renderBoard),
+   поэтому соседние предметы различаются даже когда эмодзи почти одинаковые —
+   у Apple, например, 💵 💴 💶 💷 это одна купюра в четырёх цветах.
+   Рамка при этом по-прежнему показывает редкость, её смысл не тронут. */
+.item::before{content:'';position:absolute;left:50%;top:46%;transform:translate(-50%,-50%);
+  width:92%;height:92%;border-radius:50%;pointer-events:none;
+  background:radial-gradient(circle, var(--lc,transparent) 0%, transparent 68%);opacity:.30}
+/* тёмный контур под самим значком: светлые купюры перестают тонуть в фоне */
+.item .em{position:relative;filter:drop-shadow(0 2px 4px rgba(0,0,0,.9))}
 .item .ch{position:absolute;top:-3px;left:3px;font-size:10px;font-weight:800;color:var(--gold);
   background:#0A0E13;border-radius:99px;padding:0 4px;border:1px solid var(--line)}
 .item .sp{position:absolute;top:-4px;right:-3px;font-size:12px;line-height:1;
@@ -1829,6 +1842,15 @@ function buildBoard(){
 }
 window.addEventListener('resize', sizeBoard);
 if(window.visualViewport) window.visualViewport.addEventListener('resize', sizeBoard);
+/* Оттенок подсветки по уровню. Шаг 47° по кругу — соседние уровни
+   всегда заметно разного цвета, а через 20 уровней цвет не повторяется подряд. */
+function lvlHue(l){ return 'hsl(' + ((l * 47) % 360) + ' 72% 60%)'; }
+/* Фон карточки в том же оттенке, но тёмный — предметы соседних уровней
+   различаются цветом подложки, даже если значки почти одинаковые. */
+function lvlBg(l){
+  const h = (l * 47) % 360;
+  return '--b1:hsl(' + h + ' 26% 22%);--b2:hsl(' + h + ' 30% 13%);';
+}
 function renderBoard(){
   if(!built) buildBoard();
   const cells = $('#board').children;
@@ -1842,8 +1864,8 @@ function renderBoard(){
     if(cur && cur.dataset && cur.dataset.sig === sig) continue;
     const sp = specialOf(it.l), gx = galaxyOf(it.l);
     cell.innerHTML = '<div class="item r' + (rar+1) + (sp ? ' special' : '') + (gx > 1 ? ' galaxy' : '') + '" data-sig="' + sig +
-      '" style="--rc:var(' + RAR_VAR[rar] + ')">' +
-      emo(it.l) + '<span class="lv">' + it.l + '</span>' +
+      '" style="--rc:var(' + RAR_VAR[rar] + ');--lc:' + lvlHue(it.l) + ';' + lvlBg(it.l) + '">' +
+      '<span class="em">' + emo(it.l) + '</span><span class="lv">' + it.l + '</span>' +
       (sp ? '<span class="sp">' + sp.ic + '</span>' : '') +
       (gx > 1 ? '<span class="gx">' + roman(gx) + '</span>' : '') +
       (it.ch != null ? '<span class="ch">' + it.ch + '</span>' : '') + '</div>';
@@ -1862,7 +1884,7 @@ function renderOrders(){
       continue;
     }
     h += '<button class="order' + (boardHas(o.l) ? ' ready' : '') + '" data-o="' + s + '">' +
-      '<span class="lvbadge">' + o.l + '</span><span class="em">' + emo(o.l) + '</span>' +
+      '<span class="lvbadge">' + o.l + '</span><span class="em" style="--lc:' + lvlHue(o.l) + '">' + emo(o.l) + '</span>' +
       '<span class="nm">' + nameOf(o.l) + '</span>' +
       '<span class="rw">' + fmt(o.coins) + '🪙' + (o.gems ? ' ' + o.gems + '💎' : '') + (o.chest ? ' 📦' : '') + '</span></button>';
   }
