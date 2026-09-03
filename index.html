@@ -188,7 +188,9 @@ main{flex:1;min-height:0;position:relative}
 
 /* Полоса «Бизнес-сообщество» под витринами — вход в приглашения.
    Витрины ужаты с 74 до 44 пикселей, освободившееся место занимает она. */
-#bizbar{flex:0 0 30px;height:30px;margin:0 10px 4px;border-radius:12px;position:relative;
+/* Отступ сверху такой же, как между полосой и банкоматом — 9 пикселей:
+   2 даёт нижний padding витрин, остальные 7 — этот margin. */
+#bizbar{flex:0 0 30px;height:30px;margin:7px 10px 4px;border-radius:12px;position:relative;
   display:flex;align-items:center;justify-content:center;gap:7px;overflow:hidden;
   background:linear-gradient(90deg,#0E1A24,#183044 52%,#0E1A24);
   border:2px solid #000;box-shadow:0 0 0 1px #2E6C82, 0 0 15px -7px #8FE6FF}
@@ -206,6 +208,11 @@ main{flex:1;min-height:0;position:relative}
   background:var(--panel);border:1px solid var(--line);margin-bottom:5px}
 .frow.off{opacity:.48}
 .frow.rdy{border-color:var(--gold);box-shadow:0 0 0 1px #6A4E10}
+.frow.top .fa{color:var(--gold);border-color:#6A4E10}
+.frow .fa.med{font-size:17px}
+.frow.me{border-color:var(--green);background:linear-gradient(90deg,#12241B,var(--panel))}
+.frow.me .fa{color:var(--green)}
+
 .frow .fa{width:32px;height:32px;border-radius:99px;flex:0 0 auto;display:flex;
   align-items:center;justify-content:center;font-size:14px;font-weight:800;color:#BFF3FF;
   background:linear-gradient(160deg,#1B2735,#0B131B);border:1px solid var(--line)}
@@ -215,6 +222,10 @@ main{flex:1;min-height:0;position:relative}
 .frow .fs{display:block;font-size:10px;color:var(--muted);font-weight:700;margin-top:2px;
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .frow .ft{display:block;margin-top:5px}
+/* Очки лиги — отдельной колонкой справа, чтобы никогда не обрезались */
+.frow .fr{display:flex;flex-direction:column;align-items:flex-end;gap:4px}
+.frow .fp{font-size:12.5px;font-weight:800;color:var(--gold);white-space:nowrap;line-height:1}
+.frow .fh{font-size:10px;font-weight:800;color:var(--dim);white-space:nowrap}
 
 /* ---------- ВИТРИНА ---------- */
 .vip{background:linear-gradient(180deg,#0C1016,#070A0E);border:2px solid #000;
@@ -697,7 +708,8 @@ function rarOf(l){ return clamp(Math.floor(inChain(l)/RAR_BAND), 0, 4); }
 const GOODS = {
   energy_full:  {gems:0, dyn:()=>energyPrice(energyGap()), ic:'⚡', title:'Залить под пробку', desc:'Бак энергии сразу полный'},
   energy_30:    {gems:0, dyn:()=>energyPrice(canEnergy()),  ic:'🔋', title:'Канистра',          desc:'30% бака, плещется даже сверх него'},
-  boost_drop2:  {gems:38,  ic:'🤑',  title:'Банкомат сошёл с ума', desc:'Две пачки за тап, 10 минут'},
+  boost_drop2:  {gems:38,  ic:'🤑',  title:'Банкомат сошёл с ума',
+                 desc:'Две пачки за тап, ' + C.BOOST_DROP2_MIN + ' ' + minWord(C.BOOST_DROP2_MIN)},
   coins_1:      {gems:35,  ic:'🪙',  title:'Мелочь по карманам',   desc:'Удваивает монеты, раз в час'},
   coins_2:      {gems:100, ic:'💰',  title:'Инкассаторский мешок', desc:'Умножает монеты на пять, раз в час'},
   magnets_10:   {gems:30,  ic:'🧲',  title:'Пять магнитов',        desc:'Работают без кулдауна, копятся'},
@@ -1203,6 +1215,17 @@ function weekKey(){
   const y0 = new Date(Date.UTC(on.getUTCFullYear(),0,1));
   return on.getUTCFullYear()*100 + Math.ceil(((on-y0)/86400000 + 1)/7);
 }
+/* «1 минуту», «2 минуты», «5 минут» — чтобы описания сами следовали
+   за константой и никогда не расходились с тем, что игра реально даёт. */
+function minWord(n){
+  n = Math.abs(n|0);
+  const t = n % 10, h = n % 100;
+  if(h >= 11 && h <= 14) return 'минут';
+  if(t === 1) return 'минуту';
+  if(t >= 2 && t <= 4) return 'минуты';
+  return 'минут';
+}
+const minTxt = n => n + ' ' + minWord(n);
 function toast(msg){
   const box = $('#toasts');
   for(const t of box.children) if(t.textContent === msg) return;
@@ -1624,8 +1647,11 @@ function bizNudge(){
 
 /* ---- экран ---- */
 function renderBiz(){
+  /* Строго по очкам лиги: сообщество — это в первую очередь таблица,
+     кто среди своих первый. Уровень и незабранные вехи только разводят
+     тех, у кого очки совпали. */
   const all = bizList().slice().sort((a,b)=>
-    bizPend(b)-bizPend(a) || (b.pts|0)-(a.pts|0) || (b.lvl|0)-(a.lvl|0));
+    (b.pts|0)-(a.pts|0) || (b.lvl|0)-(a.lvl|0) || bizPend(b)-bizPend(a));
   const r = bizRank(), pend = bizPendAll();
   let h = '';
 
@@ -1687,32 +1713,47 @@ function renderBiz(){
 
   // список
   h += '<h2 class="sec">Список сообщества' + (all.length ? ' · ' + all.length : '') + '</h2>';
+  if(all.length) h += '<div class="note" style="margin:0 0 7px">' +
+    'Места — по очкам лиги. Их дают только витрины Олигарх, Престиж и Знаменитость.</div>';
   if(!all.length){
     h += '<div class="card"><div class="ci">👤</div><div class="cb">' +
       '<div class="ct">Пока никого</div>' +
       '<div class="cd">Отправь ссылку — и первый человек появится здесь, ' +
       'как только доберётся до ' + C.BIZ_MIN_LVL + ' уровня.</div></div></div>';
   } else {
-    for(const f of all){
+    /* Себя вставляем в ту же таблицу, а не отдельной строкой сверху:
+       иначе непонятно, кого ты обгоняешь и кто тебя. */
+    const tab = all.concat([{ me:1, n:'Ты', lvl:S.level, pts:leaguePts()|0, last:Date.now() }])
+      .sort((a,b)=>(b.pts|0)-(a.pts|0) || (b.lvl|0)-(a.lvl|0));
+    for(let i=0;i<tab.length;i++){
+      const f = tab[i];
+      const mark = i < 3 ? ['🥇','🥈','🥉'][i] : (i+1);   // первые трое — медалями
+      if(f.me){
+        h += '<div class="frow me"><span class="fa' + (i < 3 ? ' med' : '') + '">' + mark + '</span>' +
+          '<span class="fb"><span class="fn">Ты</span>' +
+          '<span class="fs">ур. ' + S.level + '</span></span>' +
+          '<span class="fr"><span class="fp">🏆 ' + fmt(f.pts) + '</span></span></div>';
+        continue;
+      }
       const real = bizReal(f), fresh = bizFresh(f), pn = bizPend(f);
       const done = bizStepsGot(f), nx = C.BIZ_STEPS[Math.max(done, bizTaken(f.id))] || null;
       const prog = nx ? Math.min(100, (f.lvl|0)/nx[0]*100) : 100;
       const hrs = Math.round((f.min|0)/60);
       const sub = real
-        ? ('ур. ' + (f.lvl|0) + ' · ' + fmt(f.pts|0) + ' очков · ' +
-           (hrs >= 1 ? hrs + ' ч' : (f.min|0) + ' мин') + ' в игре')
+        ? ('ур. ' + (f.lvl|0) + ' · ' + (hrs >= 1 ? hrs + ' ч' : (f.min|0) + ' мин') + ' в игре')
         : ('ур. ' + (f.lvl|0) + ' · пока не в счёт: нужен ' + C.BIZ_MIN_LVL + ' ур.');
-      h += '<div class="frow' + (fresh && real ? (pn ? ' rdy' : '') : ' off') + '">' +
-        '<span class="fa">' + esc((f.n||'?').slice(0,1).toUpperCase()) + '</span>' +
+      h += '<div class="frow' + (i === 0 ? ' top' : '') +
+        (fresh && real ? (pn ? ' rdy' : '') : ' off') + '">' +
+        '<span class="fa' + (i < 3 ? ' med' : '') + '">' + mark + '</span>' +
         '<span class="fb"><span class="fn">' + esc(f.n || 'Без имени') +
           (fresh ? '' : ' 💤') + '</span>' +
         '<span class="fs">' + sub + '</span>' +
         '<span class="ft track"><span class="fill gm" style="display:block;width:' + prog + '%"></span></span></span>' +
+        '<span class="fr"><span class="fp">🏆 ' + fmt(f.pts|0) + '</span>' +
         (pn > 0
-          ? '<button class="buy gem fr" data-act="bizclaim" data-id="' + esc(f.id) + '">Забрать</button>'
-          : '<span class="fr" style="font-size:10px;font-weight:800;color:var(--dim)">' +
-            (nx ? 'до ' + nx[0] + ' ур.' : 'всё взято') + '</span>') +
-        '</div>';
+          ? '<button class="buy gem" data-act="bizclaim" data-id="' + esc(f.id) + '">Забрать</button>'
+          : '<span class="fh">' + (nx ? 'до ' + nx[0] + ' ур.' : 'всё взято') + '</span>') +
+        '</span></div>';
     }
   }
 
@@ -2362,7 +2403,7 @@ const OFFER_POOL = [
   { k:'mg',   ic:'🧲',  t:'Пачка магнитов',    gems:40,  min:30, give:{mg:8},
     d:()=>'Восемь зарядов магнита, в запасе сейчас ' + (S.magnets|0) },
   { k:'bo',   ic:'🤑',  t:'Двойной банкомат',  gems:25,  min:15, give:{bo:20},
-    d:()=>'Двадцать минут по две пачки за тап' },
+    d:()=>minTxt(20) + ' по две пачки за тап' },
   { k:'mix1', ic:'🎁',  t:'Набор игрока',      gems:70,  min:30, give:{en:2, co:2, ch:2},
     d:()=>'Два бака, кошелёк ×3 и две посылки' },
   { k:'mix2', ic:'🧳',  t:'Большой заезд',     gems:120, min:25, give:{en:3, co:4, ch:3, mg:5},
@@ -2427,7 +2468,7 @@ function showStarter(){
   openSheet('<div class="bigem">🧳</div>' +
     '<h3 class="sh-h">Подъёмные<span class="pill o">один раз</span></h3>' +
     '<p class="sh-p">Бак пустой, а мержить хочется. ' + starterEnergy() + ' энергии, <b style="color:var(--gold)">' +
-      fmt(starterCoins()) + ' 🪙</b> и сумасшедший банкомат на 10 минут.</p>' +
+      fmt(starterCoins()) + ' 🪙</b> и сумасшедший банкомат на ' + minTxt(C.BOOST_DROP2_MIN) + '.</p>' +
     '<div class="timer" id="stTimer"></div>' +
     '<div class="sh-row"><button class="btn" data-act="close">Обойдусь</button>' +
     '<button class="btn pri" data-act="gbuy" data-id="offer_starter">' + C.OFFER_STARTER_GEMS + ' 💎</button></div>');
@@ -2882,7 +2923,7 @@ function renderShop(){
   h += '<h2 class="sec">Нечестные приёмы</h2>';
   h += card('🤑','Банкомат сошёл с ума',
     S.drop2Until > Date.now() ? 'Сходит с ума ещё ' + mmss(S.drop2Until-Date.now())
-      : 'Десять минут выплёвывает по две пачки за тап.', gemBtn('boost_drop2'));
+      : minTxt(C.BOOST_DROP2_MIN) + ' выплёвывает по две пачки за тап.', gemBtn('boost_drop2'));
   h += card('🧲','Пять магнитов',
     'Заряженный магнит слипает всё поле сразу и без ожидания. В запасе: ' + (S.magnets|0) +
     '. Один заряд и так даётся за каждые ' + C.MAGNET_PER_MERGES + ' слияний руками — сейчас ' +
