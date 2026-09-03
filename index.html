@@ -55,6 +55,7 @@ button{font:inherit;color:inherit;border:0;background:none;cursor:pointer}
 /* ---------- ШАПКА (фикс 74) ---------- */
 #hud{flex:0 0 74px;height:74px;padding:8px 10px 5px;display:flex;flex-direction:column;gap:5px}
 .hud-top{display:grid;grid-template-columns:52px 1fr 1fr 28px;gap:5px;align-items:center;height:28px}
+.stat.full{border-color:var(--red);color:var(--red)}
 .stat{display:flex;align-items:center;justify-content:center;gap:5px;background:var(--panel);
   border:1px solid var(--line);border-radius:999px;padding:0 8px;height:28px;
   font-weight:800;font-size:13.5px;line-height:1;overflow:hidden;white-space:nowrap}
@@ -344,7 +345,7 @@ h2.sec:first-child{margin-top:0}
   <header id="hud">
     <div class="hud-top">
       <span class="lvlchip" id="hLvl">УР 1</span>
-      <span class="stat">🪙 <b id="hCoins">0</b></span>
+      <button class="stat" id="hCoinBtn" data-act="cap">🪙 <b id="hCoins">0</b></button>
       <button class="stat" id="hGemBtn">💎 <b id="hGems">0</b></button>
       <button id="hSnd" aria-label="Звук">🔊</button>
     </div>
@@ -412,7 +413,7 @@ h2.sec:first-child{margin-top:0}
 
 /* ============ БЛОК КОНСТАНТ (весь баланс здесь) ============ */
 const C = {
-  SAVE_VERSION:      24,      // версия сейва; при росте запускается migrate()
+  SAVE_VERSION:      26,      // версия сейва; при росте запускается migrate()
   SAVE_KEY:          'bvs_save',
   SAVE_DEBOUNCE_MS:  700,    // задержка перед записью сейва
 
@@ -476,6 +477,12 @@ const C = {
   ORDER_SLOTS_PREM:  1,      // сколько добавляет Золотая карта
   ORDER_REFRESH_SEC: 90,     // ожидание нового заказа после сдачи
   ORDER_COIN_MULT:   30,     // монет за заказ = цена предмета * это
+  COIN_CAP_MIN:      10000,  // стартовый потолок кошелька, монет
+  COIN_CAP_MULT:     10,     // потолок = столько самых жирных заказов
+  CAP_UP_PCT:        0.10,   // на сколько поднимает потолок одна докупка
+  CAP_COIN_PER_HOUR: 1,      // сколько раз в час можно поднять потолок за все монеты
+  CAP_GEM_PER_HOUR:  3,      // сколько раз в час можно поднять потолок за алмазы
+  CAP_GEM_PRICE:     30,     // цена такой докупки, алмазов
   ORDER_CHEST_CHANCE:0.20,   // шанс посылки в награду
   ORDER_GEM_CHANCE:  0.14,   // шанс алмазов в награду
   ORDER_GEMS:        [3,8],  // сколько алмазов может дать заказ
@@ -835,6 +842,9 @@ function fresh(){
     itemChests:0,          // посылки, добытые с заряженных предметов — считаются отдельно
     vipEver:0,             // предметы витрин, выкупленные в закрытых кругах — бонусы не сгорают
     chestHour:'', chestUsed:0,   // час и сколько посылок за монеты в нём уже взято
+    bestOrder:0,           // самый жирный заказ за игру — от него считается потолок кошелька
+    capMul:1,              // докупленная надбавка к потолку, множитель
+    capHour:'', capCoinUsed:0, capGemUsed:0,   // час и сколько докупок в нём сделано
     magnets:0, mergeStreak:0,   // заряды магнита и счётчик ручных слияний до следующего
     coinCd:{},                  // до какого времени пакеты монет на кулдауне
     galaxySeen:1,               // до какого витка цепочки уже показывали поздравление
@@ -922,6 +932,11 @@ function migrate(raw){
   s.vipEver = Math.max(0, s.vipEver|0);              // v22 → v23: выкупленное в прошлых кругах
   if(typeof s.chestHour !== 'string') s.chestHour = '';   // v23 → v24: часовой лимит посылок за монеты
   s.chestUsed = Math.max(0, s.chestUsed|0);
+  s.bestOrder = Math.max(0, +s.bestOrder || 0);      // v24 → v25: потолок кошелька
+  s.capMul = Math.max(1, +s.capMul || 1);            // v25 → v26: докупки потолка
+  if(typeof s.capHour !== 'string') s.capHour = '';
+  s.capCoinUsed = Math.max(0, s.capCoinUsed|0);
+  s.capGemUsed  = Math.max(0, s.capGemUsed|0);
   s.payPending = Math.max(0, +s.payPending || 0);
   if(typeof s.payPack !== 'string') s.payPack = '';
   s.magnets = Math.max(0, s.magnets|0);
@@ -1325,13 +1340,27 @@ function completeOrder(i){
   if(!o) return;
   if(!boardHas(o.l)){ offerRescue(i); return; }
   removeOne(o.l);
-  S.coins += o.coins; S.xp += o.xp;
+  /* Потолок кошелька растёт от самого жирного заказа. Поднимаем его ДО начисления,
+     иначе монеты за этот же заказ упёрлись бы в старую планку. */
+  const wasCap = coinCap();
+  if(o.coins > (S.bestOrder||0)) S.bestOrder = o.coins;
+  const nowCap = coinCap();
+  gainCoins(o.coins); S.xp += o.xp;
   quest('coins', o.coins);
   let msg = '+' + fmt(o.coins) + ' 🪙  +' + o.xp + ' XP';
   if(o.chest){ S.pendingChests++; msg += '  +📦'; }
   if(o.gems){ S.gems += o.gems; msg += '  +' + o.gems + ' 💎'; }
   toast(msg); SFX.order(); haptic('ok');
   quest('order', 1);
+  if(nowCap > wasCap){
+    SFX.level(); haptic('ok');
+    setTimeout(()=>openSheet('<div class="bigem">🏦</div>' +
+      '<h3 class="sh-h">Максимум монет поднялся</h3>' +
+      '<p class="sh-p">Сейчас: <b style="color:var(--gold)">' + fmt(nowCap) + ' 🪙</b><br>' +
+      'Было ' + fmt(wasCap) + '. Потолок — ' + C.COIN_CAP_MULT + ' самых жирных заказов, ' +
+      'так что сдавай дороже, и кошелёк станет глубже.</p>' +
+      '<div class="sh-row"><button class="btn gr" data-act="close">Понял</button></div>'), 260);
+  }
   S.orders.splice(i,1);
   if(isPremium()) fillOrders();
   else S.orderCdUntil = Date.now() + C.ORDER_REFRESH_SEC*1000;
@@ -1630,11 +1659,11 @@ function chestReward(rar){
   return { kind:'gems', n:rndInt(g[0], g[1]), rar, locked: !canItem };
 }
 function applyReward(rw){
-  if(rw.kind === 'coins') S.coins += rw.n;
+  if(rw.kind === 'coins') gainCoins(rw.n);
   if(rw.kind === 'gems')  S.gems  += rw.n;
   if(rw.kind === 'boost') S.drop2Until = Math.max(S.drop2Until, Date.now()) + C.BOOST_DROP2_MIN*60000;
   if(rw.kind === 'item'){
-    if(countFree() <= 0){ rw.sold = price(rw.l); S.coins += rw.sold; }
+    if(countFree() <= 0){ rw.sold = price(rw.l); gainCoins(rw.sold); }
     else spawn(rw.l);
   }
 }
@@ -1746,7 +1775,7 @@ function offerBuy(i){
   const g = tpl.give;
   let chests = 0;
   if(g.en){ if(S.energy >= energyMax()) S.enTs = Date.now(); S.energy += Math.round(energyMax()*g.en); }
-  if(g.co){ S.coins += pctCoins(g.co, 2000); }
+  if(g.co){ gainCoins(pctCoins(g.co, 2000)); }
   if(g.mg){ S.magnets = (S.magnets|0) + g.mg; }
   if(g.bo){ S.drop2Until = Math.max(S.drop2Until, Date.now()) + g.bo*60000; }
   if(g.prem){ S.premiumUntil = Math.max(S.premiumUntil, Date.now()) + g.prem*86400000; fillOrders(); }
@@ -1811,6 +1840,25 @@ function coinPackAmount(id){
 }
 const coinCdLeft = id => Math.max(0, (S.coinCd && S.coinCd[id] || 0) - Date.now());
 // Доля от текущего баланса, но не меньше нижнего порога
+/* Потолок кошелька: десять самых жирных заказов, но не ниже COIN_CAP_MIN.
+   Растёт только от заказов — чем дороже сданный заказ, тем выше планка. */
+const coinCap = () => Math.round(
+  Math.max(C.COIN_CAP_MIN, (S.bestOrder||0) * C.COIN_CAP_MULT) * Math.max(1, S.capMul||1));
+// Докупки потолка живут в том же часе, что и задания, и обнуляются вместе с ним
+function capHourSync(){
+  if(S.capHour !== hourKey()){ S.capHour = hourKey(); S.capCoinUsed = 0; S.capGemUsed = 0; }
+}
+const capCoinLeft = () => { capHourSync(); return Math.max(0, C.CAP_COIN_PER_HOUR - S.capCoinUsed); };
+const capGemLeft  = () => { capHourSync(); return Math.max(0, C.CAP_GEM_PER_HOUR  - S.capGemUsed);  };
+// Единственная дверь для прихода монет: всё, что сверх потолка, сгорает
+function gainCoins(n){
+  n = Math.max(0, Math.round(n));
+  const cap = coinCap();
+  const room = Math.max(0, cap - S.coins);
+  const got = Math.min(n, room);
+  S.coins += got;
+  return got;
+}
 const pctCoins = (mult, min) => Math.max(min, Math.round(Math.max(0,S.coins) * mult));
 const chestCoinPrice = () => pctCoins(C.CHEST_PRICE_PCT, C.CHEST_COIN_PRICE);
 /* Посылок за монеты — не больше CHEST_COIN_PER_HOUR в час. Счётчик привязан
@@ -1818,6 +1866,86 @@ const chestCoinPrice = () => pctCoins(C.CHEST_PRICE_PCT, C.CHEST_COIN_PRICE);
 function chestCoinLeft(){
   if(S.chestHour !== hourKey()) return C.CHEST_COIN_PER_HOUR;
   return Math.max(0, C.CHEST_COIN_PER_HOUR - (S.chestUsed|0));
+}
+/* ---------- ОКНО ПОТОЛКА КОШЕЛЬКА ----------
+   Открывается тапом по монетам в шапке. Показывает текущий потолок и две докупки:
+   за все монеты (раз в час) и за алмазы (трижды в час). Обе поднимают на CAP_UP_PCT. */
+function capSheet(){
+  const cap = coinCap(), up = Math.round(C.CAP_UP_PCT*100);
+  const cl = capCoinLeft(), gl = capGemLeft();
+  const after = n => fmt(Math.round(cap * (1 + C.CAP_UP_PCT)));
+  openSheet('<div class="bigem">🏦</div><h3 class="sh-h">Максимум монет</h3>' +
+    '<p class="sh-p" style="margin-bottom:10px">Сейчас: <b style="color:var(--gold);font-size:18px">' +
+      fmt(cap) + ' 🪙</b><br>В кошельке ' + fmt(S.coins) + '.</p>' +
+    '<div class="loot" style="max-height:none">' +
+      card('🪙', 'Вложить всё, что есть' + (cl ? '' : ' · в этом часе уже'),
+        cl ? 'Отдаёшь весь кошелёк — ' + fmt(S.coins) + ' 🪙 — и максимум растёт на ' + up +
+             '% до ' + after() + '. Раз в час.'
+           : 'Уже вкладывал в этом часе. Снова через ' + mmss(nextHourAt() - Date.now()) + '.',
+        cl && S.coins > 0
+          ? '<button class="buy coins" data-act="cap-coins">Вложить</button>'
+          : '<button class="buy" disabled>—</button>') +
+      card('💎', 'Купить за алмазы<span class="pill ' + (gl ? 'g' : '') + '">' + gl + ' из ' +
+             C.CAP_GEM_PER_HOUR + '</span>',
+        gl ? 'Максимум растёт на ' + up + '% до ' + after() + '. До ' + C.CAP_GEM_PER_HOUR +
+             ' раз в час.'
+           : 'На этот час всё. Снова через ' + mmss(nextHourAt() - Date.now()) + '.',
+        gl ? '<button class="buy gem" data-act="cap-gems">' + C.CAP_GEM_PRICE + ' 💎</button>'
+           : '<button class="buy" disabled>—</button>') +
+    '</div>' +
+    '<p class="sh-p" style="margin-top:10px;text-align:left">Главный способ поднять максимум — ' +
+      '<b>сдавать дорогие заказы</b>. Потолок равен ' + C.COIN_CAP_MULT +
+      ' самым жирным заказам за игру, но не ниже ' + fmt(C.COIN_CAP_MIN) + '. ' +
+      'Заказ дороже прежнего рекорда сразу поднимает планку, и об этом приходит сообщение.<br><br>' +
+      'Докупки выше добавляют ' + up + '% сверх этого и не сгорают. ' +
+      'Монеты, которые не поместились в кошелёк, теряются — держи запас места.</p>' +
+    '<div class="sh-row"><button class="btn gr" data-act="close">Закрыть</button></div>');
+}
+function capUp(why){
+  S.capMul = Math.max(1, S.capMul||1) * (1 + C.CAP_UP_PCT);
+  SFX.level(); haptic('ok');
+  toast('Максимум монет: ' + fmt(coinCap()) + ' 🪙');
+  renderAll(); save();
+  capSheet();
+}
+async function capBuyCoins(){
+  if(capCoinLeft() <= 0 || S.coins <= 0) return;
+  const ok = await ask('Вложить весь кошелёк?',
+    'Отдашь ' + fmt(S.coins) + ' 🪙 и максимум вырастет на ' + Math.round(C.CAP_UP_PCT*100) +
+    '% — до ' + fmt(Math.round(coinCap()*(1+C.CAP_UP_PCT))) + '.\n\nМонеты не вернутся.',
+    'Вложить');
+  if(!ok){ capSheet(); return; }
+  if(S.coins <= 0) return;
+  capHourSync(); S.capCoinUsed++;
+  S.coins = 0;
+  capUp();
+}
+async function capBuyGems(){
+  if(capGemLeft() <= 0) return;
+  const ok = await ask('Поднять максимум?',
+    'Максимум вырастет на ' + Math.round(C.CAP_UP_PCT*100) + '% — до ' +
+    fmt(Math.round(coinCap()*(1+C.CAP_UP_PCT))) + '.\n\nСпишется ' + C.CAP_GEM_PRICE +
+    ' 💎, у тебя ' + fmt(S.gems) + '.',
+    'Поднять · ' + C.CAP_GEM_PRICE + ' 💎');
+  if(!ok){ capSheet(); return; }
+  if(!spendGems(C.CAP_GEM_PRICE)) return;
+  capHourSync(); S.capGemUsed++;
+  capUp();
+}
+
+/* Сброс часового ожидания за алмазы. Спрашиваем подтверждение: 50 алмазов —
+   заметная сумма, промахнуться пальцем по кнопке легко. */
+async function resetChestHour(){
+  if(chestCoinLeft() > 0) return;
+  const ok = await ask('Обновить посылки?',
+    'Часовое ожидание сбросится, и снова можно взять ' + C.CHEST_COIN_PER_HOUR +
+    ' посылок за монеты.\n\nСпишется ' + C.CHEST_COIN_RESET_GEMS + ' 💎, у тебя ' + fmt(S.gems) + '.',
+    'Обновить · ' + C.CHEST_COIN_RESET_GEMS + ' 💎');
+  if(!ok) return;
+  if(!spendGems(C.CHEST_COIN_RESET_GEMS)) return;
+  S.chestHour = hourKey(); S.chestUsed = 0;
+  toast('Посылки за монеты снова доступны'); SFX.gem(); haptic('ok');
+  renderAll(); save();
 }
 function chestCoinTake(){
   if(S.chestHour !== hourKey()){ S.chestHour = hourKey(); S.chestUsed = 0; }
@@ -1842,8 +1970,8 @@ function gemBuy(id){
     case 'energy_30':   if(S.energy >= energyMax()) S.enTs = Date.now(); S.energy += canEnergy(); toast('+' + canEnergy() + ' ⚡'); break;
     case 'boost_drop2': S.drop2Until = Math.max(S.drop2Until, Date.now()) + C.BOOST_DROP2_MIN*60000; toast('Банкомат сошёл с ума'); break;
     case 'coins_1': case 'coins_2': {
-      const n = coinPackAmount(id);
-      S.coins += n; quest('coins', n);
+      let n = coinPackAmount(id);
+      n = gainCoins(n); quest('coins', n);
       S.coinCd[id] = Date.now() + C.COIN_BUY_CD_MIN*60000;
       toast('+' + fmt(n) + ' 🪙');
       break;
@@ -1855,14 +1983,14 @@ function gemBuy(id){
       S.premiumUntil = Math.max(S.premiumUntil, Date.now()) + C.PREM_DAYS*86400000;
       S.enTs = Date.now(); fillOrders(); toast('Золотая карта в кармане'); break;
     case 'offer_starter':
-      S.energy += starterEnergy(); S.coins += starterCoins();
+      S.energy += starterEnergy(); gainCoins(starterCoins());
       S.drop2Until = Math.max(S.drop2Until, Date.now()) + C.BOOST_DROP2_MIN*60000;
       S.starterDone = true; toast('Подъёмные получены'); break;
     case 'offer_rescue':
       if(S.rescueTarget){ spawn(S.rescueTarget); S.rescueTarget = null; toast('Вещь на поле'); }
       break;
     case 'offer_weekend':
-      S.energy = energyMax(); S.coins += weekendCoins(); S.weekendWeek = weekKey();
+      S.energy = energyMax(); gainCoins(weekendCoins()); S.weekendWeek = weekKey();
       toast('Загул оплачен'); openChests(3); return;
   }
   renderAll(); save();
@@ -1954,6 +2082,8 @@ function itemSheet(i){
 function renderHud(){
   $('#hLvl').textContent = 'УР ' + S.level;
   $('#hCoins').textContent = fmt(S.coins);
+  // Кошелёк полон — счётчик краснеет. Тап по нему открывает окно потолка.
+  $('#hCoinBtn').classList.toggle('full', S.coins >= coinCap());
   $('#hGems').textContent = fmt(S.gems);
   const em = energyMax();
   $('#fEn').style.width = clamp(S.energy/em*100,0,100) + '%';
@@ -2166,7 +2296,7 @@ function renderChests(){
         mmss(nextHourAt() - Date.now()) + '</b> — или сбрось ожидание за ' + C.CHEST_COIN_RESET_GEMS + ' 💎.'),
     left > 0
       ? '<button class="buy coins" data-act="chest-coins"' + (S.coins < chestCoinPrice() ? ' disabled' : '') + '>' + fmt(chestCoinPrice()) + ' 🪙</button>'
-      : '<button class="buy gem" data-act="chest-reset">' + C.CHEST_COIN_RESET_GEMS + ' 💎</button>');
+      : '<button class="buy gem" data-act="chest-reset">🔄 ' + C.CHEST_COIN_RESET_GEMS + ' 💎</button>');
   h += card('🎁','Посылка','Одно вскрытие.', gemBtn('chest_1'));
   h += card('🚚','Фура посылок','Десять вскрытий, все награды покажем списком.', gemBtn('chest_10'));
 
@@ -2412,6 +2542,9 @@ function helpSheet(){
       C.VIP_GEMS + ' 💎</b> и <b>+' + C.VIP_ENERGY + ' ⚡</b> к баку навсегда. Каждые ' + C.VIP_STEP_GEN +
       ' выкупленных предметов поднимают минимальный сброс банкомата на уровень — как задания. ' +
       'Сейчас выкуплено: ' + vipCount() + '.') +
+    legalRow('🏦','У кошелька есть потолок: <b>' + fmt(coinCap()) + ' 🪙</b>. Он равен ' + C.COIN_CAP_MULT +
+      ' самым жирным сданным заказам, но не ниже ' + fmt(C.COIN_CAP_MIN) + '. Монеты сверх потолка не приходят, ' +
+      'так что поднимай планку заказами подороже.') +
     legalRow('🪙','Монеты дают: <b>заказы</b> сверху — платят в ' + C.ORDER_COIN_MULT +
       ' раз больше цены предмета, это главный источник; <b>Касса</b> 🏦 на уровнях 25, 50, 75 и 100 — ' +
       'тап даёт вдвое больше продажи; продажа предмета тапом; посылки. В магазине есть ' +
@@ -2542,8 +2675,8 @@ function tapCell(i){
       if(ni >= 0) popCell(ni);
       SFX.tap();
     } else if(sp.type === 'safe'){
-      const n = price(it.l) * C.SAFE_MULT;
-      S.coins += n; quest('coins', n);
+      let n = price(it.l) * C.SAFE_MULT;
+      n = gainCoins(n); quest('coins', n);
       toast('Касса: +' + fmt(n) + ' 🪙'); SFX.coin();
     } else if(sp.type === 'energy'){
       if(S.energy >= energyMax()) S.enTs = Date.now();
@@ -2591,7 +2724,7 @@ document.addEventListener('click', e=>{
     case 'gbuy': { const id = b.dataset.id; if(inSheet) $('#veil').classList.remove('on'); gemBuy(id); return; }
     case 'sell': {
       const i = +b.dataset.i, it = S.board[i];
-      if(it){ const p = price(it.l); S.coins += p; S.board[i] = null;
+      if(it){ const p = price(it.l); gainCoins(p); S.board[i] = null;
               quest('coins', p); quest('sell', 1);
               toast('Сбагрил за ' + fmt(p) + ' 🪙'); SFX.coin(); haptic('ok'); }
       closeSheet(); renderAll(); save(); return;
@@ -2602,13 +2735,10 @@ document.addEventListener('click', e=>{
       if(chestCoinLeft() <= 0){ toast('На этот час посылки кончились'); SFX.err(); haptic('err'); return; }
       S.coins -= p; chestCoinTake(); openChests(1, 'coins'); return;
     }
-    case 'chest-reset': {
-      if(chestCoinLeft() > 0) return;
-      if(!spendGems(C.CHEST_COIN_RESET_GEMS)) return;
-      S.chestHour = hourKey(); S.chestUsed = 0;
-      toast('Посылки за монеты снова доступны'); SFX.gem(); haptic('ok');
-      renderAll(); save(); return;
-    }
+    case 'cap':       capSheet(); return;
+    case 'cap-coins': capBuyCoins(); return;
+    case 'cap-gems':  capBuyGems(); return;
+    case 'chest-reset': resetChestHour(); return;
     case 'chest-free': {
       const n = S.pendingChests; if(n <= 0) return;
       S.pendingChests = 0; openChests(n); return;
