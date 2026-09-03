@@ -419,7 +419,7 @@ h2.sec:first-child{margin-top:0}
 
 /* ============ БЛОК КОНСТАНТ (весь баланс здесь) ============ */
 const C = {
-  SAVE_VERSION:      27,      // версия сейва; при росте запускается migrate()
+  SAVE_VERSION:      28,      // версия сейва; при росте запускается migrate()
   SAVE_KEY:          'bvs_save',
   SAVE_DEBOUNCE_MS:  700,    // задержка перед записью сейва
 
@@ -451,7 +451,10 @@ const C = {
   LVL_REWARD_CAP:    10,
 
   ENERGY_MAX:        100,    // стартовый максимум энергии
-  ENERGY_REGEN_SEC:  90,     // секунд на +1 энергии (без премиума)
+  ENERGY_GEMS_PER_100: 60,   // алмазов за 100 энергии в магазине
+  ENERGY_GEMS_OFFER:   30,   // столько же, но в разделе «Пока дают»
+  REGEN_PER_100:       1,    // на сколько в минуту ускоряется откат за каждые 100 бака
+  ENERGY_REGEN_SEC:  60,     // не используется напрямую: откат считается от размера бака
   ENERGY_TAP_COST:   2,      // базовая цена сброса банкомата, энергии
   TAP_COST_STEP:     5,      // каждые столько уровней игрока сброс дорожает на 1
   ENERGY_CAN_PCT:    0.30,   // «Канистра» доливает эту долю бака
@@ -460,7 +463,9 @@ const C = {
 
   // Минимальный сброс банкомата растёт за выполненные задания.
   // Без этого 100 уровней недостижимы: 100-й — это 2^99 центов.
-  GEN_STEP_QUESTS:   2,      // сколько заданий поднимают сброс на 1 уровень
+  /* Сколько заданий поднимают сброс на уровень. Чем выше сброс, тем дороже шаг:
+     [до какого уровня, сколько заданий]. Последняя строка действует дальше. */
+  GEN_STEPS:         [[20,2],[40,3],[60,4],[Infinity,5]],
   GEN_SPREAD:        1,      // насколько выше минимума может выпасть предмет
   GEN_PLUS2_CHANCE:  0.12,   // шанс выдать ещё на уровень выше
 
@@ -503,6 +508,16 @@ const C = {
   QUEST_HAND:        [7,15], // сколько ручных слияний просит задание
   QUEST_SELL:        8,      // сколько предметов просит продать задание
   QUEST_VAULT:       5,      // сколько сейфов просит вскрыть задание
+
+  // Задания на день: два штуки, награда случайная из четырёх
+  DAILY_COUNT:       2,      // сколько дневных заданий выдаётся
+  DAILY_ORDERS:      20,     // сдать заказов
+  DAILY_HAND:        150,    // объединить вручную
+  DAILY_TAPS:        500,    // тапнуть банкомат
+  DAILY_CHESTS:      10,     // награда: посылок
+  DAILY_GEMS:        150,    // награда: алмазов
+  DAILY_PTS:         150,    // награда: очков лиги
+  DAILY_BAK:         10,     // награда: прибавка к баку навсегда
   REROLL_FREE_DAY:   1,      // бесплатных смен всех заказов в день
   REROLL_GEMS:       20,     // цена смены заказов сверх лимита
 
@@ -604,8 +619,8 @@ function rarOf(l){ return clamp(Math.floor(inChain(l)/RAR_BAND), 0, 4); }
 
 /* ============ ЧТО ПОКУПАЕТСЯ ЗА АЛМАЗЫ (цены вдвое ниже прежних) ============ */
 const GOODS = {
-  energy_full:  {gems:60,  ic:'⚡',  title:'Залить под пробку',    desc:'Бак энергии сразу полный'},
-  energy_30:    {gems:25,  ic:'🔋',  title:'Канистра',             desc:'30% бака, плещется даже сверх него'},
+  energy_full:  {gems:0, dyn:()=>energyPrice(energyGap()), ic:'⚡', title:'Залить под пробку', desc:'Бак энергии сразу полный'},
+  energy_30:    {gems:0, dyn:()=>energyPrice(canEnergy()),  ic:'🔋', title:'Канистра',          desc:'30% бака, плещется даже сверх него'},
   boost_drop2:  {gems:38,  ic:'🤑',  title:'Банкомат сошёл с ума', desc:'Две пачки за тап, 10 минут'},
   coins_1:      {gems:35,  ic:'🪙',  title:'Мелочь по карманам',   desc:'Удваивает монеты, раз в час'},
   coins_2:      {gems:100, ic:'💰',  title:'Инкассаторский мешок', desc:'Умножает монеты на пять, раз в час'},
@@ -858,6 +873,7 @@ function fresh(){
     bestOrder:0,           // самый жирный заказ за игру — от него считается потолок кошелька
     capMul:1,              // докупленная надбавка к потолку, множитель
     capHour:'', capCoinUsed:0, capGemUsed:0,   // час и сколько докупок в нём сделано
+    daily:[], bakBonus:0,  // задания на день и прибавка к баку, добытая ими
     magnets:0, mergeStreak:0,   // заряды магнита и счётчик ручных слияний до следующего
     coinCd:{},                  // до какого времени пакеты монет на кулдауне
     galaxySeen:1,               // до какого витка цепочки уже показывали поздравление
@@ -953,6 +969,8 @@ function migrate(raw){
   if(typeof s.capHour !== 'string') s.capHour = '';
   s.capCoinUsed = Math.max(0, s.capCoinUsed|0);
   s.capGemUsed  = Math.max(0, s.capGemUsed|0);
+  if(!Array.isArray(s.daily)) s.daily = [];          // v27 → v28: задания на день
+  s.bakBonus = Math.max(0, s.bakBonus|0);
   s.payPending = Math.max(0, +s.payPending || 0);
   if(typeof s.payPack !== 'string') s.payPack = '';
   s.magnets = Math.max(0, s.magnets|0);
@@ -1029,6 +1047,10 @@ function hourKey(){
   const d = new Date();
   return d.toISOString().slice(0,10) + '#' + Math.floor(d.getHours() / C.QUEST_HOURS);
 }
+// Полночь по тому же правилу, по которому считается день
+function nextDayAt(){
+  const d = new Date(); d.setHours(24,0,0,0); return d.getTime();
+}
 function nextHourAt(){
   const d = new Date();
   const step = C.QUEST_HOURS;
@@ -1069,7 +1091,7 @@ const isPremium = () => S.premiumUntil > Date.now();
 // Сколько предметов выкуплено во всех трёх витринах за текущий круг
 const vipCount = () => (S.vip||[]).reduce((n,a)=>n + (a ? a.length : 0), 0) + (S.vipEver|0);
 const energyMax = () => Math.round((C.ENERGY_MAX + (S.level-1)*C.ENERGY_PER_LEVEL
-    + vipCount()*C.VIP_ENERGY) *
+    + vipCount()*C.VIP_ENERGY + (S.bakBonus|0)) *
   (isPremium() ? 1 + C.PREM_ENERGY_PCT : 1));
 // Все доливки считаются от текущего бака, поэтому не отстают от уровня
 const canEnergy     = () => Math.round(energyMax() * C.ENERGY_CAN_PCT);
@@ -1077,7 +1099,16 @@ const specialEnergy = () => C.SPECIAL_ENERGY;
 const starterEnergy = () => Math.round(energyMax() * C.STARTER_ENERGY_PCT);
 // Каждое выполненное задание добавляет 10% ко всему получаемому опыту
 const xpMult = () => 1 + C.XP_PER_QUEST_BONUS * (S.questsDone|0);
-const regenSec  = () => C.ENERGY_REGEN_SEC / (isPremium() ? C.PREM_REGEN_MULT : 1);
+/* Откат энергии зависит от размера бака: 1 в минуту на первой сотне и плюс
+   ещё по одной за каждые следующие 100. На баке 400 это 4 в минуту. */
+const regenPerMin = () => Math.max(1, Math.floor(energyMax() / 100) * C.REGEN_PER_100);
+const regenSec  = () => 60 / regenPerMin() / (isPremium() ? C.PREM_REGEN_MULT : 1);
+/* Цена доливки привязана к количеству энергии, а не к кнопке:
+   ENERGY_GEMS_PER_100 алмазов за сотню, в «Пока дают» вдвое дешевле. */
+const energyPrice = (amount, offer) => Math.max(1, Math.ceil(
+  Math.max(0, amount) / 100 * (offer ? C.ENERGY_GEMS_OFFER : C.ENERGY_GEMS_PER_100)));
+// сколько не хватает до полного бака
+const energyGap = () => Math.max(0, Math.ceil(energyMax() - S.energy));
 const orderSlots= () => C.ORDER_SLOTS + (isPremium() ? C.ORDER_SLOTS_PREM : 0);
 const xpNeed = l => Math.round(C.XP_BASE * Math.pow(l, C.XP_POW));
 // Цена предмета: экспонента по уровню, сверху множитель редкости
@@ -1086,10 +1117,26 @@ const price = l => Math.round(C.SELL_BASE * Math.pow(C.SELL_POW, l-1) * RAR_COIN
 // Опыт за слияние и за заказ тоже растёт с редкостью
 const mergeXp = l => Math.round(C.XP_PER_MERGE * RAR_XP[rarOf(l)] * Math.pow(C.GALAXY_XP_MULT, galaxyOf(l)-1) * xpMult());
 const orderXp = l => Math.round(C.XP_PER_ORDER_LVL * Math.sqrt(l) * RAR_XP[rarOf(l)] / 2 * xpMult());
-// Минимальный сброс банкомата: +1 уровень за каждые GEN_STEP_QUESTS заданий
-const genMin = () => clamp(1 + Math.floor(S.questsDone / C.GEN_STEP_QUESTS)
+/* Минимальный сброс банкомата. Растёт от заданий, но шаг дорожает с уровнем:
+   до 20-го — 2 задания, с 20-го — 3, с 40-го — 4, с 60-го — 5.
+   Считаем прогоном от начала, чтобы состояние не хранить и старые сейвы
+   пересчитывались сами. */
+const genStepFor = lvl => (C.GEN_STEPS.find(x => lvl < x[0]) || C.GEN_STEPS[C.GEN_STEPS.length-1])[1];
+function genFromQuests(done){
+  let lvl = 1, left = Math.max(0, done|0), guard = 0;
+  while(guard++ < 2000){
+    const step = genStepFor(lvl);
+    if(left < step) break;
+    left -= step; lvl++;
+  }
+  return { lvl, left };
+}
+const genMin = () => clamp(genFromQuests(S.questsDone).lvl
   + Math.floor(vipCount() / C.VIP_STEP_GEN), 1, C.MAX_LVL - 2);
-const questsToNextGen = () => C.GEN_STEP_QUESTS - (S.questsDone % C.GEN_STEP_QUESTS);
+const questsToNextGen = () => {
+  const g = genFromQuests(S.questsDone);
+  return genStepFor(g.lvl) - g.left;
+};
 const rowsMax = () => {
   let r = C.ROWS_START;
   for(const lv of C.ROW_UNLOCK_LEVELS) if(S.level >= lv) r++;
@@ -1421,7 +1468,7 @@ function rerollOrders(){
 /* ============ ЕЖЕДНЕВНЫЕ ЗАДАНИЯ ============ */
 const QUESTS = [
   { id:'merge', text:n=>'Сделай ' + n + ' слияний',        goal:()=>rndInt(25,50) },
-  { id:'order', text:n=>'Сдай ' + n + ' заказов',          goal:()=>rndInt(3,6) },
+  { id:'order', text:n=>'Сдай ' + n + ' заказов',          goal:()=>rndInt(1,3) },
   { id:'tap',   text:n=>'Тапни банкомат ' + n + ' раз',    goal:()=>rndInt(30,60) },
   /* Цель не выше сброса банкомата плюс QUEST_REACH_SPREAD: иначе задание
      просит вещь, до которой мержиться полдня. Заодно не выше увиденного. */
@@ -1434,6 +1481,45 @@ const QUESTS = [
   { id:'sell',  text:n=>'Продай ' + n + ' любых предметов', goal:()=>C.QUEST_SELL },
   { id:'vault', text:n=>'Открой ' + n + ' Сейфов Мажора 🔐', goal:()=>C.QUEST_VAULT },
 ];
+/* ---------- ЗАДАНИЯ НА ДЕНЬ ----------
+   Два задания в сутки, награда у каждого своя и выбирается случайно.
+   Прогресс идёт через ту же функцию quest(), что и часовые. */
+const DAILY = [
+  { id:'order', text:n=>'Сдай ' + n + ' заказов',           goal:()=>C.DAILY_ORDERS },
+  { id:'hand',  text:n=>'Объедини вручную ' + n + ' раз',   goal:()=>C.DAILY_HAND },
+  { id:'tap',   text:n=>'Тапни банкомат ' + n + ' раз',     goal:()=>C.DAILY_TAPS },
+];
+const DAILY_REWARDS = [
+  { k:'chest', ic:'📦', text:()=>C.DAILY_CHESTS + ' посылок' },
+  { k:'gems',  ic:'💎', text:()=>C.DAILY_GEMS + ' алмазов' },
+  { k:'pts',   ic:'🏆', text:()=>C.DAILY_PTS + ' очков лиги' },
+  { k:'bak',   ic:'⚡', text:()=>'+' + C.DAILY_BAK + ' к баку навсегда' },
+];
+function rollDaily(){
+  const pool = DAILY.slice(), out = [];
+  for(let i=0;i<C.DAILY_COUNT && pool.length;i++){
+    const q = pool.splice(rndInt(0,pool.length-1),1)[0];
+    out.push({ id:q.id, goal:q.goal(), cur:0, done:false, claim:false,
+               rw: rndInt(0, DAILY_REWARDS.length-1) });
+  }
+  return out;
+}
+function claimDaily(i){
+  const q = S.daily[i]; if(!q || !q.claim) return;
+  q.claim = false;
+  const rw = DAILY_REWARDS[q.rw] || DAILY_REWARDS[0];
+  let line = '';
+  if(rw.k === 'chest'){ S.pendingChests += C.DAILY_CHESTS; line = '<b>' + C.DAILY_CHESTS + ' посылок</b> ждут во вкладке'; }
+  if(rw.k === 'gems'){  S.gems += C.DAILY_GEMS;            line = '<b style="color:var(--gem)">+' + C.DAILY_GEMS + ' 💎</b>'; }
+  if(rw.k === 'pts'){   S.ptsBank += C.DAILY_PTS;          line = '<b style="color:var(--gold)">+' + C.DAILY_PTS + ' очков лиги</b>'; }
+  if(rw.k === 'bak'){   S.bakBonus = (S.bakBonus|0) + C.DAILY_BAK;
+                        line = '<b style="color:var(--gold)">+' + C.DAILY_BAK + ' ⚡ к баку навсегда</b><br>Теперь бак ' + energyMax(); }
+  SFX.level(); haptic('ok');
+  openSheet('<div class="bigem">' + rw.ic + '</div><h3 class="sh-h">Дневное задание закрыто</h3>' +
+    '<p class="sh-p">' + line + '</p>' +
+    '<div class="sh-row"><button class="btn gr" data-act="close">Забрать</button></div>');
+  renderAll(); save();
+}
 function rollQuests(){
   const pool = QUESTS.slice(), out = [];
   for(let i=0;i<C.QUEST_COUNT && pool.length;i++){
@@ -1447,8 +1533,10 @@ function rollDay(){
   if(S.day !== d){
     S.day = d;
     S.rerollLeft = C.REROLL_FREE_DAY;   // бесплатная смена заказов — раз в сутки
+    S.daily = rollDaily();              // новые задания на день
     save();
   }
+  if(!S.daily || !S.daily.length) S.daily = rollDaily();
   rollHour();
 }
 // Набор заданий живёт один час и меняется сам
@@ -1461,8 +1549,14 @@ function rollHour(){
   save();
 }
 function quest(kind,val){
-  if(!S.quests) return;
   let ch = false;
+  // дневные задания считают тот же прогресс, что и часовые
+  for(const q of (S.daily||[])){
+    if(q.done || q.id !== kind) continue;
+    q.cur += val;
+    if(q.cur >= q.goal){ q.done = true; q.claim = true; ch = true; }
+  }
+  if(!S.quests){ if(ch){ toast('Задание выполнено!'); renderAlerts(); } return; }
   for(const q of S.quests){
     if(q.done || q.id !== kind) continue;
     if(kind === 'reach') q.cur = Math.max(q.cur, val);
@@ -1478,7 +1572,7 @@ function rerollQuests(){
   toast('Задания поменялись'); SFX.order();
   renderAll(); save();
 }
-// Награда за задание. Каждые GEN_STEP_QUESTS заданий поднимают сброс банкомата.
+// Награда за задание. Набранные задания поднимают сброс банкомата — шаг растёт с уровнем.
 // Награда зависит от места в наборе: первое задание дешевле, третье жирнее
 const questGems = i => C.QUEST_GEMS[Math.min(i, C.QUEST_GEMS.length - 1)];
 function claimQuest(i){
@@ -1757,9 +1851,11 @@ function openChests(n, src){
 /* ============ ЖИВЫЕ ПРЕДЛОЖЕНИЯ ============
    Пул разнородных наборов с разными ценами и сроками жизни. */
 const OFFER_POOL = [
-  { k:'en1',  ic:'⚡',  t:'Бочка энергии',     gems:20,  min:20, give:{en:1.5},
+  { k:'en1',  ic:'⚡',  t:'Бочка энергии',     min:20, give:{en:1.5},
+    dyn:()=>energyPrice(energyMax()*1.5, true),
     d:()=>'Полтора бака сверху — ' + Math.round(energyMax()*1.5) + ' ⚡' },
-  { k:'en2',  ic:'🛢️', t:'Заправка досуха',   gems:35,  min:15, give:{en:2.5},
+  { k:'en2',  ic:'🛢️', t:'Заправка досуха',   min:15, give:{en:2.5},
+    dyn:()=>energyPrice(energyMax()*2.5, true),
     d:()=>'Два с половиной бака — ' + Math.round(energyMax()*2.5) + ' ⚡' },
   { k:'co1',  ic:'🪙',  t:'Горсть монет',      gems:15,  min:10, give:{co:1.5},
     d:()=>'Кошелёк вырастет в полтора раза: +' + fmt(pctCoins(1.5, 2000)) + ' 🪙' },
@@ -1813,7 +1909,7 @@ function offerBuy(i){
   if(!o) return;
   const tpl = OFFER_POOL.find(x=>x.k === o.k);
   if(!tpl) { S.offers.splice(i,1); return; }
-  if(!spendGems(tpl.gems)) return;
+  if(!spendGems(tpl.dyn ? tpl.dyn() : tpl.gems)) return;
   const g = tpl.give;
   let chests = 0;
   if(g.en){ if(S.energy >= energyMax()) S.enTs = Date.now(); S.energy += Math.round(energyMax()*g.en); }
@@ -1864,12 +1960,13 @@ function weekendActive(){ const d = new Date().getDay(); return (d === 0 || d ==
 function offerEnergy(){
   openSheet('<div class="bigem">⚡</div>' +
     '<h3 class="sh-h">Банкомат зажевал карту</h3>' +
-    '<p class="sh-p">Энергия на нуле. Само накапает по +1 каждые ' + Math.round(regenSec()) + ' сек, до полного бака ' +
+    '<p class="sh-p">Энергия на нуле. Само накапает по ' + regenPerMin() + ' в минуту, до полного бака ' +
       mmss((energyMax()-S.energy)*regenSec()*1000) + '. Канистра доливает ' + (C.ENERGY_CAN_PCT*100) +
       '% бака, сейчас это ' + canEnergy() + ' ⚡. Или не ждём.</p>' +
     '<div class="sh-row"><button class="btn" data-act="close">Подожду</button>' +
-    '<button class="btn pri" data-act="gbuy" data-id="energy_30">+' + (C.ENERGY_CAN_PCT*100) + '% ⚡ · ' + GOODS.energy_30.gems + ' 💎</button></div>' +
-    '<div class="sh-row"><button class="btn pri" data-act="gbuy" data-id="energy_full" style="flex:1">Под пробку · ' + GOODS.energy_full.gems + ' 💎</button></div>');
+    '<button class="btn pri" data-act="gbuy" data-id="energy_30">+' + canEnergy() + ' ⚡ · ' + goodPrice('energy_30') + ' 💎</button></div>' +
+    '<div class="sh-row"><button class="btn pri" data-act="gbuy" data-id="energy_full" style="flex:1">Под пробку · +' +
+      energyGap() + ' ⚡ · ' + goodPrice('energy_full') + ' 💎</button></div>');
 }
 
 /* ============ ПАКЕТЫ МОНЕТ ============
@@ -2031,7 +2128,7 @@ function gemBuy(id){
     const left = coinCdLeft(id);
     if(left > 0){ toast(g.title + ': ещё ' + mmss(left)); SFX.err(); haptic('err'); return; }
   }
-  if(!spendGems(g.gems)) return;
+  if(!spendGems(goodPrice(id))) return;
   SFX.coin();
   switch(id){
     case 'energy_full': S.energy = energyMax(); S.enTs = Date.now(); toast('Бак полный'); break;
@@ -2165,7 +2262,7 @@ function renderHud(){
   $('#hXpT').textContent = S.level >= C.MAX_PLAYER_LVL ? 'максимум' : (Math.floor(S.xp) + '/' + need);
   const sub = [emo(genMin()) + ' ' + nameOf(genMin()), '−' + tapCost() + ' ⚡'];
   if(S.drop2Until > Date.now()) sub.push('бешеный ' + mmss(S.drop2Until-Date.now()));
-  else sub.push(C.GEN_STEP_QUESTS === 1 ? '+1 за задание' : 'до роста: ' + questsToNextGen());
+  else sub.push('до роста: ' + questsToNextGen());
   $('#genSub').textContent = sub.join(' · ');
   $('#gen').classList.toggle('dead', S.energy < tapCost());
   const pairs = countMergeable(), cd = S.mergeAllUntil - Date.now();
@@ -2267,7 +2364,9 @@ function card(ic,t,d,btn,cls){
   return '<div class="card' + (cls ? ' '+cls : '') + '"><div class="ci">' + ic + '</div>' +
     '<div class="cb"><div class="ct">' + t + '</div><div class="cd">' + d + '</div></div>' + (btn||'') + '</div>';
 }
-const gemBtn = id => '<button class="buy gem" data-act="gbuy" data-id="' + id + '">' + GOODS[id].gems + ' 💎</button>';
+// Цена товара: у большинства фиксированная, у доливок энергии считается от объёма
+const goodPrice = id => { const g = GOODS[id]; return g ? (g.dyn ? g.dyn() : g.gems) : 0; };
+const gemBtn = id => '<button class="buy gem" data-act="gbuy" data-id="' + id + '">' + goodPrice(id) + ' 💎</button>';
 
 function renderShop(){
   let h = '';
@@ -2284,7 +2383,7 @@ function renderShop(){
   h += card('⚡','Залить под пробку',
     (S.energy > energyMax() ? 'В баке ' + Math.floor(S.energy) + ' при максимуме ' + energyMax() + ' — излишек не пропадёт'
                             : 'В баке ' + Math.floor(S.energy) + ' из ' + energyMax()) +
-    '. Само капает по +1 каждые ' + Math.round(regenSec()) + ' сек.', gemBtn('energy_full'));
+    '. Само капает по ' + regenPerMin() + ' в минуту — скорость растёт с размером бака.', gemBtn('energy_full'));
   h += card('🔋','Канистра','Доливает ' + (C.ENERGY_CAN_PCT*100) + '% бака — сейчас ' + canEnergy() +
     ' ⚡. Плещется даже сверх максимума.', gemBtn('energy_30'));
 
@@ -2323,7 +2422,8 @@ function renderShop(){
       if(!tpl) continue;
       h += card(tpl.ic, tpl.t + '<span class="pill o">' + mmss(o.until - Date.now()) + '</span>',
         tpl.d(),
-        '<button class="buy gem" data-act="offerbuy" data-i="' + i + '">' + tpl.gems + ' 💎</button>', 'hero');
+        '<button class="buy gem" data-act="offerbuy" data-i="' + i + '">' +
+          (tpl.dyn ? tpl.dyn() : tpl.gems) + ' 💎</button>', 'hero');
     }
     if(weekendActive())
       h += card('🎪','Загул на выходные<span class="pill o">сб и вс</span>',
@@ -2386,11 +2486,11 @@ function renderTasks(){
     '<div style="font-size:30px">' + emo(genMin()) + '</div>' +
     '<div style="flex:1;min-width:0"><div style="font-weight:800;font-size:14px">' + nameOf(genMin()) + '</div>' +
     '<div style="font-size:11px;color:var(--muted);font-weight:700">' +
-      (C.GEN_STEP_QUESTS === 1
-        ? 'Каждое выполненное задание поднимает сброс на уровень. Следующее даст ' + nameOf(genMin()+1)
-        : 'Ещё ' + questsToNextGen() + ' заданий — и банкомат начнёт сыпать ' + nameOf(genMin()+1)) + '</div>' +
+      ('Ещё ' + questsToNextGen() + ' заданий — и банкомат начнёт сыпать ' + nameOf(genMin()+1) +
+       ' · шаг ' + genStepFor(genFromQuests(S.questsDone).lvl) + ' заданий') + '</div>' +
     '<div class="track" style="margin-top:6px"><div class="fill xp" style="width:' +
-      (C.GEN_STEP_QUESTS === 1 ? 100 : (C.GEN_STEP_QUESTS - questsToNextGen())/C.GEN_STEP_QUESTS*100) +
+      (() => { const st = genStepFor(genFromQuests(S.questsDone).lvl);
+               return (st - questsToNextGen()) / st * 100; })() +
       '%"></div></div></div></div></div>';
 
   h += '<h2 class="sec">Задания на этот час</h2>';
@@ -2411,11 +2511,32 @@ function renderTasks(){
     '<button class="buy ' + (S.questRerollLeft > 0 ? 'coins' : 'gem') + '" data-act="qreroll">' +
       (S.questRerollLeft > 0 ? 'Обновить' : C.QUEST_REROLL_GEMS + ' 💎') + '</button>');
 
+  // Задания на день — под часовыми: они длиннее и не требуют внимания каждый час
+  if((S.daily||[]).length){
+    h += '<h2 class="sec">Задания на день</h2>';
+    h += '<div class="pitybox" style="padding:10px 12px;margin-bottom:8px"><div class="pt" style="margin:0">' +
+      '<span>Обновятся</span><span id="dTimer">' + mmss(nextDayAt() - Date.now()) + '</span></div></div>';
+    for(let i=0;i<S.daily.length;i++){
+      const q = S.daily[i], def = DAILY.find(x=>x.id === q.id), rw = DAILY_REWARDS[q.rw] || DAILY_REWARDS[0];
+      const pct = clamp(q.cur/q.goal*100,0,100);
+      h += '<div class="card' + (q.done && !q.claim ? ' done' : '') + '"><div class="ci">' +
+        (q.done ? '✅' : rw.ic) + '</div>' +
+        '<div class="cb"><div class="ct">' + def.text(q.goal) + '</div>' +
+        '<div class="cd">' + fmt(Math.min(q.cur,q.goal)) + ' из ' + fmt(q.goal) + ' · ' + rw.text() + '</div>' +
+        '<div class="track" style="margin-top:5px"><div class="fill xp" style="width:' + pct + '%"></div></div></div>' +
+        (q.claim ? '<button class="buy gem" data-act="daily" data-i="' + i + '">Забрать</button>'
+                 : '<button class="buy" disabled>' + rw.ic + '</button>') + '</div>';
+    }
+  }
+
   h += '<h2 class="sec">Награды за уровни</h2>';
   h += '<div class="pitybox" style="padding:10px 12px;margin-bottom:8px"><div class="pt" style="margin:0 0 4px">' +
     '<span>Уровень ' + S.level + ' из ' + C.MAX_PLAYER_LVL + '</span><span>награда ×' + rewardMult(S.level) + '</span></div>' +
     '<div style="font-size:11px;color:var(--muted);font-weight:700;line-height:1.45">' +
-    'Бак от уровня: <b>' + energyMax() + '</b> (+' + C.ENERGY_PER_LEVEL + ' за уровень). ' +
+    'Бак: <b>' + energyMax() + '</b> (+' + C.ENERGY_PER_LEVEL + ' за уровень игрока). ' +
+    'Откат <b>' + regenPerMin() + ' в минуту</b> — по одной за каждые 100 бака. ' +
+    'Доливка стоит ' + C.ENERGY_GEMS_PER_100 + ' 💎 за сотню энергии, в «Пока дают» — ' +
+    C.ENERGY_GEMS_OFFER + '. ' +
     'Весь опыт умножен на <b>×' + xpMult().toFixed(1) + '</b> — по +' + (C.XP_PER_QUEST_BONUS*100) +
     '% за каждое из ' + S.questsDone + ' выполненных заданий. ' +
     'Награда за уровень растёт на ' + (C.LVL_REWARD_BONUS*100) + '% каждые ' + C.LVL_REWARD_STEP +
@@ -2606,9 +2727,9 @@ function helpSheet(){
   openSheet('<div class="bigem">💡</div><h3 class="sh-h">Помощь</h3>' +
     '<div class="loot" style="max-height:min(52vh,340px)">' +
     legalRow('🏧','Банкомат сыпет <b>' + nameOf(genMin()) + '</b>. Минимальный сброс поднимают ' +
-      '<b>выполненные задания</b>: ' + (C.GEN_STEP_QUESTS === 1
-        ? 'каждое задание поднимает сброс ровно на один уровень'
-        : 'каждые ' + C.GEN_STEP_QUESTS + ' заданий — плюс один уровень, до следующего роста ' + questsToNextGen()) +
+      '<b>выполненные задания</b>: сейчас нужно ' + genStepFor(genFromQuests(S.questsDone).lvl) +
+      ' на уровень, до следующего роста ' + questsToNextGen() +
+      '. Дальше дороже: с 20-го уровня три задания, с 40-го четыре, с 60-го пять' +
       '. Заданий ' + C.QUEST_COUNT +
       ' в наборе, награда за них ' + C.QUEST_GEMS.join(', ') + ' 💎 — чем ниже в списке, тем жирнее. ' +
       'Набор меняется каждый час, обновить досрочно можно за ' + C.QUEST_REROLL_GEMS + ' 💎. ' +
@@ -2677,7 +2798,8 @@ function renderAll(){
   renderAlerts();
 }
 function renderAlerts(){
-  document.querySelector('.tab[data-s="task"]').classList.toggle('alert', (S.quests||[]).some(x=>x.claim));
+  document.querySelector('.tab[data-s="task"]').classList.toggle('alert',
+    (S.quests||[]).some(x=>x.claim) || (S.daily||[]).some(x=>x.claim));
   document.querySelector('.tab[data-s="shop"]').classList.toggle('alert',
     S.offers.length > 0 || weekendActive() || (!S.starterDone && S.starterUntil > Date.now()));
   document.querySelector('.tab[data-s="chest"]').classList.toggle('alert',
@@ -2833,6 +2955,7 @@ document.addEventListener('click', e=>{
       if(!isPremium() || S.dailyChestDay === dayKey()) return;
       S.dailyChestDay = dayKey(); openChests(1); return;
     case 'quest': claimQuest(+b.dataset.i); return;
+    case 'daily': claimDaily(+b.dataset.i); return;
     case 'qreroll': rerollQuests(); return;
     case 'vipbuy': vipBuy(+b.dataset.i, +b.dataset.t); return;
     case 'offerbuy': offerBuy(+b.dataset.i); return;
@@ -2874,6 +2997,7 @@ function loop(){
   const hadHour = S.hour;
   rollHour();
   if(hadHour !== S.hour && cur === 'task') renderTasks();   // час сменился — перерисуем список
+  if(cur === 'task'){ const dt = document.getElementById('dTimer'); if(dt) dt.textContent = mmss(nextDayAt() - Date.now()); }
   const qt = document.getElementById('qTimer');
   if(qt) qt.textContent = mmss(nextHourAt() - Date.now());
   const got = tickOrders();
