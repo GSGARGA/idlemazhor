@@ -154,16 +154,28 @@ main{flex:1;min-height:0;position:relative}
 #ghost{position:fixed;pointer-events:none;z-index:90;transform:translate(-50%,-50%) scale(1.12);
   filter:drop-shadow(0 8px 12px rgba(0,0,0,.6));display:none}
 
+/* ---------- ТОЛЬКО ВЕРТИКАЛЬНО ---------- */
+/* Если телефон всё-таки повернули — вместо поехавшей вёрстки просим повернуть
+   обратно. Перекрывает всё, включая открытые окна. */
+#rot{position:fixed;inset:0;z-index:200;display:none;padding:24px;text-align:center;
+  flex-direction:column;align-items:center;justify-content:center;gap:13px;
+  background:radial-gradient(115% 95% at 50% 22%,#16263F 0%,#0A0E13 72%)}
+#rot.on{display:flex}
+#rot .re{font-size:50px;line-height:1;animation:rotwig 2.4s ease-in-out infinite}
+#rot .rt{font-family:var(--disp);font-weight:700;font-size:20px}
+#rot .rs{font-size:12px;color:var(--muted);font-weight:700;max-width:300px;line-height:1.6}
+@keyframes rotwig{0%,42%{transform:rotate(-90deg)}58%,100%{transform:rotate(0)}}
+
 /* ---------- ДОК (фикс 64) ---------- */
 /* Три витрины на месте убранных рядов поля */
-#tiers{flex:0 0 74px;height:74px;padding:2px 10px 4px;display:flex;gap:7px}
+#tiers{flex:0 0 44px;height:44px;padding:2px 10px 2px;display:flex;gap:7px}
 .tier{flex:1;min-width:0;border-radius:15px;display:flex;flex-direction:column;
   align-items:center;justify-content:center;gap:2px;position:relative;overflow:hidden;
   background:linear-gradient(180deg,#0C1016,#070A0E);border:2px solid #000;
   box-shadow:0 0 0 1px #23303E, inset 0 1px 0 rgba(255,255,255,.05)}
-.tier .te{font-size:20px;line-height:1}
+.tier .te{font-size:17px;line-height:1}
 .tier .tn{font-size:8px;font-weight:800;letter-spacing:.02em;color:var(--muted);white-space:nowrap}
-.tier .dot{position:absolute;top:6px;right:8px;width:8px;height:8px;border-radius:99px;
+.tier .dot{position:absolute;top:4px;right:6px;width:7px;height:7px;border-radius:99px;
   background:var(--red);display:none}
 .tier.alert .dot{display:block}
 .tier.t1{border-color:#D9A227;box-shadow:0 0 0 1px #6A4E10, 0 0 14px -6px #FFCE3D}
@@ -172,7 +184,37 @@ main{flex:1;min-height:0;position:relative}
 .tier.t2 .tn{color:#BFF3FF}
 .tier:disabled{opacity:.45}
 .tier .lock{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
-  font-size:18px;background:rgba(6,9,13,.72)}
+  font-size:15px;background:rgba(6,9,13,.72)}
+
+/* Полоса «Бизнес-сообщество» под витринами — вход в приглашения.
+   Витрины ужаты с 74 до 44 пикселей, освободившееся место занимает она. */
+#bizbar{flex:0 0 30px;height:30px;margin:0 10px 4px;border-radius:12px;position:relative;
+  display:flex;align-items:center;justify-content:center;gap:7px;overflow:hidden;
+  background:linear-gradient(90deg,#0E1A24,#183044 52%,#0E1A24);
+  border:2px solid #000;box-shadow:0 0 0 1px #2E6C82, 0 0 15px -7px #8FE6FF}
+#bizbar .be{font-size:14px;line-height:1}
+#bizbar .bt{font-size:9px;font-weight:800;letter-spacing:.07em;color:#BFF3FF}
+#bizbar .bn{font-size:9px;font-weight:800;color:var(--muted)}
+#bizbar .dot{position:absolute;top:4px;right:8px;width:8px;height:8px;border-radius:99px;
+  background:var(--red);display:none}
+#bizbar.alert .dot{display:block}
+#bizbar.alert{border-color:#D9A227;box-shadow:0 0 0 1px #6A4E10, 0 0 17px -5px #FFCE3D}
+#bizbar.alert .bt{color:#FFCE3D}
+
+/* Строка человека в сообществе */
+.frow{display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:11px;
+  background:var(--panel);border:1px solid var(--line);margin-bottom:5px}
+.frow.off{opacity:.48}
+.frow.rdy{border-color:var(--gold);box-shadow:0 0 0 1px #6A4E10}
+.frow .fa{width:32px;height:32px;border-radius:99px;flex:0 0 auto;display:flex;
+  align-items:center;justify-content:center;font-size:14px;font-weight:800;color:#BFF3FF;
+  background:linear-gradient(160deg,#1B2735,#0B131B);border:1px solid var(--line)}
+.frow .fb{flex:1;min-width:0;display:block}
+.frow .fn{display:block;font-weight:700;font-size:13px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.frow .fs{display:block;font-size:10px;color:var(--muted);font-weight:700;margin-top:2px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.frow .ft{display:block;margin-top:5px}
 
 /* ---------- ВИТРИНА ---------- */
 .vip{background:linear-gradient(180deg,#0C1016,#070A0E);border:2px solid #000;
@@ -308,6 +350,10 @@ h2.sec:first-child{margin-top:0}
 .step.now .sl{color:var(--green)}
 .step .se{font-size:20px;width:26px;text-align:center}
 .step .st{flex:1;min-width:0;font-size:12px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* Лестница штата: награда в строку не влезает, пускаем в две */
+.steps.two .step{align-items:flex-start;padding-top:9px;padding-bottom:9px}
+.steps.two .st{white-space:normal;text-overflow:clip;line-height:1.4}
+.steps.two .st b{display:block;color:var(--gold)}
 
 /* ---------- ЛИСТЫ ---------- */
 .veil{position:fixed;inset:0;background:rgba(4,7,10,.76);z-index:100;display:none;
@@ -379,6 +425,7 @@ h2.sec:first-child{margin-top:0}
         <button class="tier t1" data-tier="1"><span class="te">👑</span><span class="tn">ПРЕСТИЖ</span><span class="dot"></span></button>
         <button class="tier t2" data-tier="2"><span class="te">💠</span><span class="tn">ЗВЕЗДА</span><span class="dot"></span></button>
       </div>
+      <button id="bizbar"><span class="be">🤝</span><span class="bt">БИЗНЕС-СООБЩЕСТВО</span><span class="bn" id="bizN"></span><span class="dot"></span></button>
       <div id="dock">
         <button id="gen">
           <span class="g-em">🏧</span>
@@ -393,6 +440,7 @@ h2.sec:first-child{margin-top:0}
     <section class="screen" id="scr-chest"><div class="scroll" id="chestBody"></div></section>
     <section class="screen" id="scr-league"><div class="scroll" id="leagueBody"></div></section>
     <section class="screen" id="scr-vip"><div class="scroll" id="vipBody"></div></section>
+    <section class="screen" id="scr-biz"><div class="scroll" id="bizBody"></div></section>
   </main>
 
   <nav id="tabs">
@@ -407,6 +455,8 @@ h2.sec:first-child{margin-top:0}
 <div id="ghost"></div>
 <div class="veil" id="veil"><div class="sheet" id="sheet"></div></div>
 <div id="toasts"></div>
+<div id="rot"><span class="re">📱</span><span class="rt">Поверни телефон</span>
+  <span class="rs">МАЖОР играется вертикально — так поле выше и мержить удобнее.</span></div>
 
 <script>
 "use strict";
@@ -418,7 +468,7 @@ h2.sec:first-child{margin-top:0}
 
 /* ============ БЛОК КОНСТАНТ (весь баланс здесь) ============ */
 const C = {
-  SAVE_VERSION:      28,      // версия сейва; при росте запускается migrate()
+  SAVE_VERSION:      30,      // версия сейва; при росте запускается migrate()
   SAVE_KEY:          'bvs_save',
   SAVE_DEBOUNCE_MS:  700,    // задержка перед записью сейва
 
@@ -528,6 +578,32 @@ const C = {
   MAGNET_PER_MERGES: 5,      // столько ручных слияний заряжают один бесплатный магнит
   MAGNET_PACK:       5,      // сколько магнитов в паке за алмазы
   BOOST_DROP2_MIN:   2,      // минут действия «Банкомат сошёл с ума»
+
+  /* ===== БИЗНЕС-СООБЩЕСТВО (приглашённые друзья) =====
+     Ссылка вида t.me/БОТ/ПРИЛОЖЕНИЕ?startapp=r<мой id>. Кто кого привёл —
+     знает только сервер: в сейве такое подделывается за минуту.
+     Три слоя: вехи (разово за рост друга), доля (навсегда с его добычи)
+     и штат (постоянные бонусы за число активных). */
+  BIZ_BOT:            'MazhorGameBot',  // бот, к которому ведёт приглашение
+  BIZ_APP:            'play',           // короткое имя мини-приложения
+  BIZ_WELCOME_GEMS:   50,    // подарок новичку, пришедшему по ссылке
+  BIZ_WELCOME_CHESTS: 3,     // и посылок ему же
+  BIZ_SHARE_PCT:      0.10,  // доля заработанных другом алмазов — пригласившему
+  BIZ_ACTIVE_DAYS:    7,     // не заходил столько дней — выпал из активных
+  BIZ_MIN_LVL:        5,     // ниже этого уровня друг ещё не считается
+  BIZ_MIN_MIN:        30,    // и должен провести в игре столько минут
+  BIZ_LIST_MAX:       200,   // сколько человек показываем в списке
+  BIZ_SYNC_MIN:       5,     // как часто спрашивать сервер про сообщество, минут
+  BIZ_NUDGE_MIN:      15,    // минут между напоминаниями про сообщество
+  BIZ_NUDGE_LVL:      3,     // или столько уровней — что наступит раньше
+  BIZ_NUDGE_SLOW:     4,     // во столько раз реже, когда сообщество уже собрано
+  /* Вехи за каждого друга: [уровень друга, алмазы, магниты, дней Золотой карты] */
+  BIZ_STEPS: [[5,25,0,0],[15,75,5,0],[30,200,0,0],[50,500,0,7]],
+  /* Штат: [активных друзей, магнитов, посылок, к баку навсегда, доля к максимуму монет].
+     Награда разовая — выдаётся один раз, когда порог впервые взят. */
+  BIZ_RANKS: [[1,5,1,25,0.05],[3,10,3,50,0.10],[5,15,5,75,0.15],
+              [10,25,10,150,0.25],[25,50,25,300,0.50]],
+  BIZ_RANK_NAMES: ['Одиночка','Партнёр','Артель','Фирма','Холдинг','Корпорация'],
 
   PREM_DAYS:         7,      // длительность Золотой карты в днях
   PREM_ENERGY_PCT:   0.5,    // на сколько Золотая карта увеличивает бак (доля)
@@ -740,13 +816,22 @@ function tickLive(){
   if(document.visibilityState === 'visible' && gap > 0 && gap < 60) liveSec += gap;
   if(now - pingTs > C.PING_EVERY_SEC*1000) sendPing(false);
 }
-function sendPing(leaving){
+/* Одним запросом отдаём и время, и всё про сообщество: уровень, очки лиги,
+   добытые алмазы, кто привёл. Так на сервере получается ОДНА запись вместо
+   двух, и данные друзей всегда свежие. */
+function sendPing(leaving, force){
   if(PAY.mode !== 'live' || !PAY.backend) return;
   const sec = Math.round(liveSec);
-  if(sec < C.PING_MIN_SEC) return;
+  if(sec < C.PING_MIN_SEC && !force) return;
   liveSec = 0; pingTs = Date.now();
   const name = (tg && tg.initDataUnsafe && tg.initDataUnsafe.user && tg.initDataUnsafe.user.first_name) || '';
-  const body = JSON.stringify({ initData:(tg && tg.initData) || '', sec, name });
+  const b = { initData:(tg && tg.initData) || '', sec, name,
+              lvl:S.level|0, pts:leaguePts()|0, ref:(S.biz && S.biz.ref) || '' };
+  /* Добычу отдаём только обычным запросом: у маячка нельзя прочитать ответ,
+     а значит нельзя убедиться, что она дошла, и её бы потеряли. */
+  const pool = leaving ? 0 : Math.max(0, S.biz.pool|0);
+  if(pool > 0) b.gems = pool;
+  const body = JSON.stringify(b);
   try{
     // при уходе обычный fetch могут не успеть отправить — шлём маячком
     if(leaving && navigator.sendBeacon){
@@ -754,7 +839,10 @@ function sendPing(leaving){
       return;
     }
     fetch(PAY.backend + '/api/ping', { method:'POST',
-      headers:{'Content-Type':'application/json'}, body, keepalive:true }).catch(()=>{});
+      headers:{'Content-Type':'application/json'}, body, keepalive:true })
+      .then(r=>r.json())
+      .then(d=>{ if(d && d.ok) pingBack(d, pool); })
+      .catch(()=>{});
   }catch(e){}
 }
 document.addEventListener('visibilitychange', ()=>{
@@ -791,6 +879,36 @@ function applyInsets(){
   root.style.setProperty('--safe-bot', ((sa.bottom || 0) + (ca.bottom || 0)) + 'px');
   try{ sizeBoard(); }catch(e){}
 }
+/* ---------- ТОЛЬКО ВЕРТИКАЛЬНО ----------
+   Три уровня защиты, потому что ни один не работает везде:
+     lockOrientation    — родной замок Telegram, Bot API 8.0. Закрепляет ТЕКУЩУЮ
+                          ориентацию, поэтому зовём его только из вертикали;
+     screen.orientation — браузерный замок: Android в полном экране слушается,
+                          iOS его не поддерживает вовсе;
+     заглушка «поверни» — если оба не сработали. Честнее, чем поехавший экран. */
+function isLandscape(){
+  // именно телефон боком: на планшете и на компьютере ширина больше высоты — это норма
+  return window.innerWidth > window.innerHeight && window.innerHeight < 520;
+}
+function lockPortrait(){
+  try{
+    if(tg && tg.lockOrientation && !tg.isOrientationLocked && !isLandscape()) tg.lockOrientation();
+  }catch(e){}
+  try{
+    if(screen.orientation && screen.orientation.lock){
+      const r = screen.orientation.lock('portrait');
+      if(r && r.catch) r.catch(()=>{});
+    }
+  }catch(e){}
+}
+function checkRotate(){
+  const el = document.getElementById('rot');
+  if(!el) return;
+  const bad = isLandscape();
+  el.classList.toggle('on', bad);
+  if(!bad) lockPortrait();     // вернулись в вертикаль — снова пробуем закрепить
+}
+
 if(tg){ try{
   tg.ready(); tg.expand();
   if(tg.setHeaderColor)            tg.setHeaderColor('#0A0E13');       // шапка в цвет игры
@@ -800,15 +918,22 @@ if(tg){ try{
   const phone = tg.platform === 'android' || tg.platform === 'ios';
   const v8 = tg.isVersionAtLeast ? tg.isVersionAtLeast('8.0') : false;
   if(phone && v8 && tg.requestFullscreen){ try{ tg.requestFullscreen(); }catch(e){} }
+  if(phone && v8) lockPortrait();          // 8.0+: закрепляем вертикаль
   if(tg.onEvent){
     ['viewportChanged','safeAreaChanged','contentSafeAreaChanged',
      'fullscreenChanged','fullscreenFailed'].forEach(ev=>{
        try{ tg.onEvent(ev, applyInsets); }catch(e){}
      });
+    // после выхода в полный экран замок можно поставить заново
+    try{ tg.onEvent('fullscreenChanged', lockPortrait); }catch(e){}
   }
 }catch(e){} }
 applyInsets();
-window.addEventListener('resize', applyInsets);
+checkRotate();
+window.addEventListener('resize', ()=>{ applyInsets(); checkRotate(); });
+window.addEventListener('orientationchange', ()=>setTimeout(checkRotate, 120));
+if(screen.orientation && screen.orientation.addEventListener)
+  screen.orientation.addEventListener('change', ()=>setTimeout(checkRotate, 120));
 
 /* ============ ЗВУК: синтез на WebAudio, ни одного файла ============ */
 const SFX = {
@@ -888,6 +1013,11 @@ function fresh(){
     hadZeroEnergy:false, starterUntil:0, starterDone:false, weekendWeek:-1,
     rescueDay:'', rescueCount:0, rescueCdUntil:0, rescueTarget:null,
     offers:[], offerNextAt:0,     // живые предложения и время следующего
+    /* Сообщество: ref — кто меня привёл, list — присланный сервером список,
+       taken — сколько вех уже забрано по каждому другу, pool — заработанные
+       алмазы, ещё не отданные серверу для расчёта доли. */
+    biz:{ ref:'', list:[], taken:{}, rankTaken:0, pool:0, got:0, stepGems:0,
+          syncAt:0, nudgeAt:0, nudgeLvl:0, welcomed:0, ok:0 },
     sound:true, tut:false,
   };
 }
@@ -971,6 +1101,15 @@ function migrate(raw){
   s.capGemUsed  = Math.max(0, s.capGemUsed|0);
   if(!Array.isArray(s.daily)) s.daily = [];          // v27 → v28: задания на день
   s.bakBonus = Math.max(0, s.bakBonus|0);
+  // v28 → v29: бизнес-сообщество. Старые сейвы просто получают пустое.
+  if(!s.biz || typeof s.biz !== 'object') s.biz = f.biz;
+  s.biz.ref = String(s.biz.ref || '');
+  s.biz.list = Array.isArray(s.biz.list) ? s.biz.list : [];
+  if(!s.biz.taken || typeof s.biz.taken !== 'object') s.biz.taken = {};
+  s.biz.pool = Math.max(0, s.biz.pool|0);
+  s.biz.got  = Math.max(0, s.biz.got|0);
+  s.biz.stepGems = Math.max(0, s.biz.stepGems|0);
+  s.biz.rankTaken = Math.max(0, s.biz.rankTaken|0);   // v29 → v30: награды штата
   s.payPending = Math.max(0, +s.payPending || 0);
   if(typeof s.payPack !== 'string') s.payPack = '';
   s.magnets = Math.max(0, s.magnets|0);
@@ -1075,8 +1214,19 @@ function toast(msg){
 }
 // renderAll, а не renderHud: иначе открытая вкладка магазина показывала
 // старый баланс и старые цены, пока не переключишься на поле и обратно.
-function addGems(n, why){
+/* Заработанные алмазы копим отдельно от купленных: пригласившему капает
+   доля только с добычи, покупки за звёзды в неё не входят. */
+function earnGems(n){
+  n = Math.max(0, Math.round(n));
   S.gems += n;
+  if(S.biz) S.biz.pool = (S.biz.pool|0) + n;
+  return n;
+}
+// Экранируем имена из Telegram — они приходят с сервера и попадают в разметку
+function esc(t){ return String(t == null ? '' : t)
+  .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function addGems(n, why){
+  earnGems(n);
   toast((why ? why + ': ' : '') + '+' + n + ' 💎');
   SFX.gem(); renderAll(); save();
 }
@@ -1231,11 +1381,353 @@ function levelReward(l){
 }
 function giveLevelReward(l){
   const r = levelReward(l);
-  if(r.kind === 'gems')  S.gems += r.n;
+  if(r.kind === 'gems')  earnGems(r.n);
   if(r.kind === 'chest') S.pendingChests += r.n;
   if(r.kind === 'boost') S.drop2Until = Math.max(S.drop2Until, Date.now()) + C.BOOST_DROP2_MIN*60000;
   if(r.kind === 'row')   S.rows = rowsMax();
   return r;
+}
+
+/* ============ БИЗНЕС-СООБЩЕСТВО ============
+   Приглашённые друзья. Связь «кто кого привёл» живёт ТОЛЬКО на сервере:
+   в сейве её подделали бы за минуту. Клиент показывает присланный список,
+   а свои цифры (уровень, очки лиги, добытые алмазы) отдаёт вместе с обычным
+   пингом времени — отдельных записей в хранилище это не добавляет.
+
+   Три слоя мотивации, чтобы работали и привлечение, и удержание:
+     вехи  — разовая награда, когда друг перерастает ступень BIZ_STEPS;
+     доля  — BIZ_SHARE_PCT от всего, что друг добыл, навсегда и из кармана
+             игры, а не из его кармана;
+     штат  — постоянные бонусы за число АКТИВНЫХ, то есть заходивших. */
+
+function myTgId(){
+  try{ return (tg && tg.initDataUnsafe && tg.initDataUnsafe.user && tg.initDataUnsafe.user.id) || 0; }
+  catch(e){ return 0; }
+}
+function bizLink(){ return 'https://t.me/' + C.BIZ_BOT + '/' + C.BIZ_APP + '?startapp=r' + (myTgId() || '0'); }
+function bizList(){ return (S.biz && Array.isArray(S.biz.list)) ? S.biz.list : []; }
+// Настоящий друг: дорос до BIZ_MIN_LVL и провёл в игре BIZ_MIN_MIN минут.
+// Ферму одноразовых аккаунтов это делает невыгодной — бот столько не наиграет.
+function bizReal(f){ return (f.lvl|0) >= C.BIZ_MIN_LVL && (f.min|0) >= C.BIZ_MIN_MIN; }
+// Активный: заходил за последние BIZ_ACTIVE_DAYS дней
+function bizFresh(f){ return Date.now() - (f.last||0) < C.BIZ_ACTIVE_DAYS*86400000; }
+function bizActive(){ let n = 0; for(const f of bizList()) if(bizReal(f) && bizFresh(f)) n++; return n; }
+
+/* Ранг штата: последний перекрытый порог. Индекс 0 — «Одиночка». */
+function bizRank(){
+  const a = bizActive();
+  const r = { i:0, active:a };
+  for(let k=0;k<C.BIZ_RANKS.length;k++) if(a >= C.BIZ_RANKS[k][0]) r.i = k+1;
+  r.name = C.BIZ_RANK_NAMES[Math.min(r.i, C.BIZ_RANK_NAMES.length-1)];
+  r.nextName = C.BIZ_RANK_NAMES[Math.min(r.i+1, C.BIZ_RANK_NAMES.length-1)];
+  r.next = C.BIZ_RANKS[r.i] || null;    // следующий порог или null на потолке
+  return r;
+}
+/* Что даёт порог. Награда разовая: взял её один раз — и она остаётся,
+   даже если люди потом разбегутся. */
+function rankRewardText(k, short){
+  const q = C.BIZ_RANKS[k], p = [];
+  if(q[1]) p.push(q[1] + ' 🧲');
+  if(q[2]) p.push(q[2] + ' 📦');
+  if(q[3]) p.push('+' + q[3] + ' ⚡' + (short ? '' : ' к баку'));
+  if(q[4]) p.push('+' + Math.round(q[4]*100) + (short ? '% 🏦' : '% к максимуму монет'));
+  return p.join(' · ');
+}
+// Сколько порогов взято, но ещё не забрано
+function bizRankPend(){ return Math.max(0, bizRank().i - (S.biz.rankTaken|0)); }
+function bizClaimRank(){
+  const to = bizRank().i, from = S.biz.rankTaken|0;
+  if(to <= from){ toast('Пока нечего забирать'); SFX.err(); haptic('err'); return; }
+  let mg = 0, ch = 0, bak = 0, cap = 1;
+  for(let k=from;k<to;k++){
+    const q = C.BIZ_RANKS[k];
+    mg += q[1]; ch += q[2]; bak += q[3]; cap *= (1 + q[4]);
+  }
+  S.biz.rankTaken = to;
+  if(mg)  S.magnets = (S.magnets|0) + mg;
+  if(ch)  S.pendingChests = (S.pendingChests|0) + ch;
+  if(bak) S.bakBonus = (S.bakBonus|0) + bak;
+  const wasCap = coinCap();
+  if(cap > 1) S.capMul = Math.max(1, S.capMul||1) * cap;
+  SFX.level(); haptic('ok');
+  openSheet('<div class="bigem">🏢</div>' +
+    '<h3 class="sh-h">' + C.BIZ_RANK_NAMES[Math.min(to, C.BIZ_RANK_NAMES.length-1)] + '</h3>' +
+    '<p class="sh-p">Штат вырос. Разовая награда:<br>' +
+    (mg  ? '<b style="color:var(--gold)">+' + mg + ' 🧲 магнитов</b><br>' : '') +
+    (ch  ? '<b style="color:var(--gold)">+' + ch + ' 📦 посылок</b><br>' : '') +
+    (bak ? '<b style="color:var(--gold)">+' + bak + ' ⚡ к баку навсегда</b> · теперь ' + energyMax() + '<br>' : '') +
+    (cap > 1 ? '<b style="color:var(--gold)">Максимум монет: ' + fmt(coinCap()) + '</b><br>было ' + fmt(wasCap) : '') +
+    '</p><div class="sh-row"><button class="btn gr" data-act="close">В карман</button></div>');
+  renderAll(); save();
+}
+
+/* ---- вехи ---- */
+function bizStepsGot(f){
+  if(!bizReal(f)) return 0;
+  let n = 0;
+  for(const st of C.BIZ_STEPS) if((f.lvl|0) >= st[0]) n++;
+  return n;
+}
+function bizTaken(id){ return ((S.biz.taken||{})[id]|0); }
+function bizPend(f){ return Math.max(0, bizStepsGot(f) - bizTaken(f.id)); }
+function bizPendAll(){ let n = 0; for(const f of bizList()) n += bizPend(f); return n; }
+function bizClaim(id){
+  const f = bizList().find(x=>String(x.id) === String(id));
+  if(!f) return;
+  const from = bizTaken(f.id), to = bizStepsGot(f);
+  if(to <= from){ toast('Пока нечего забирать'); SFX.err(); haptic('err'); return; }
+  let gems = 0, mg = 0, prem = 0;
+  for(let i=from;i<to;i++){ const st = C.BIZ_STEPS[i]; gems += st[1]; mg += st[2]; prem += st[3]; }
+  S.biz.taken = S.biz.taken || {};
+  S.biz.taken[f.id] = to;
+  // Награда за приглашение в общий котёл добычи не идёт: иначе получилась бы
+  // пирамида, где доля капает с доли.
+  S.gems += gems;
+  S.biz.stepGems = (S.biz.stepGems|0) + gems;
+  if(mg)   S.magnets = (S.magnets|0) + mg;
+  if(prem) S.premiumUntil = Math.max(S.premiumUntil, Date.now()) + prem*86400000;
+  SFX.gem(); haptic('ok');
+  openSheet('<div class="bigem">🤝</div>' +
+    '<h3 class="sh-h">' + esc(f.n || 'Твой человек') + ' растёт</h3>' +
+    '<p class="sh-p">Закрыто вех: ' + (to-from) + '.<br>' +
+    '<b style="color:var(--gem)">+' + fmt(gems) + ' 💎</b>' +
+    (mg ? '<br><b style="color:var(--gold)">+' + mg + ' 🧲 магнитов</b>' : '') +
+    (prem ? '<br><b style="color:var(--gold)">Золотая карта на ' + prem + ' дн.</b>' : '') + '</p>' +
+    '<div class="sh-row"><button class="btn gr" data-act="close">В карман</button></div>');
+  if(prem) fillOrders();
+  renderAll(); save();
+}
+
+/* ---- приглашение ---- */
+function bizShare(){
+  if(!myTgId()){ toast('Открой игру в Telegram — там появится твоя ссылка'); SFX.err(); return; }
+  const text = 'Го в МАЖОР — мержим бабки, растим состояние. ' +
+    'За вход по этой ссылке тебе ' + C.BIZ_WELCOME_GEMS + ' алмазов и ' +
+    C.BIZ_WELCOME_CHESTS + ' посылки.';
+  const u = 'https://t.me/share/url?url=' + encodeURIComponent(bizLink()) +
+            '&text=' + encodeURIComponent(text);
+  haptic('light');
+  try{
+    if(tg && tg.openTelegramLink) tg.openTelegramLink(u);
+    else window.open(u, '_blank');
+  }catch(e){ try{ window.open(u, '_blank'); }catch(e2){} }
+}
+function bizCopy(){
+  if(!myTgId()){ toast('Открой игру в Telegram — там появится твоя ссылка'); SFX.err(); return; }
+  const u = bizLink();
+  try{
+    navigator.clipboard.writeText(u);
+    toast('Ссылка скопирована'); haptic('ok');
+  }catch(e){ toast(u); }
+}
+/* Кто меня привёл. Читаем из start_param один раз и навсегда: перепривязка
+   запрещена, самого себя пригласить нельзя. */
+function bizCatchRef(){
+  if(!S.biz || S.biz.ref) return;
+  let p = '';
+  try{ p = (tg && tg.initDataUnsafe && tg.initDataUnsafe.start_param) || ''; }catch(e){}
+  if(!p || p.charAt(0) !== 'r') return;
+  const id = p.slice(1);
+  if(!/^\d{3,20}$/.test(id)) return;
+  if(String(id) === String(myTgId())) return;
+  S.biz.ref = id;
+  save();
+}
+
+/* ---- ответ на пинг ----
+   Сервер возвращает насчитанную долю и отметку «этому новичку подарок ещё
+   не выдавали». Начисляем и то и другое здесь. */
+function pingBack(d, pool){
+  if(pool > 0) S.biz.pool = Math.max(0, (S.biz.pool|0) - pool);   // отдано — вычитаем ровно столько
+  S.biz.ok = 1;
+  const share = Math.max(0, Math.round(+d.share || 0));
+  if(share > 0){
+    S.gems += share; S.biz.got = (S.biz.got|0) + share;
+    toast('Доля с сообщества: +' + fmt(share) + ' 💎'); SFX.gem();
+  }
+  if(d.welcome && !S.biz.welcomed){
+    S.biz.welcomed = 1;
+    S.gems += C.BIZ_WELCOME_GEMS;
+    S.pendingChests += C.BIZ_WELCOME_CHESTS;
+    SFX.gem(); haptic('ok');
+    setTimeout(()=>openSheet('<div class="bigem">🎁</div>' +
+      '<h3 class="sh-h">Подарок за вход по ссылке</h3>' +
+      '<p class="sh-p"><b style="color:var(--gem)">' + C.BIZ_WELCOME_GEMS + ' 💎</b> и <b>' +
+      C.BIZ_WELCOME_CHESTS + ' посылки</b> от того, кто тебя позвал.<br>' +
+      'Теперь ты в его сообществе — и можешь собрать своё.</p>' +
+      '<div class="sh-row"><button class="btn" data-act="close">Спасибо</button>' +
+      '<button class="btn gold" data-act="tobiz">Моё сообщество</button></div>'), 700);
+  }
+  if(cur === 'biz') renderBiz();
+  renderAll(); save();
+}
+
+/* ---- список сообщества ----
+   Только чтение: сервер ничего не записывает, отдаёт карточки тех, кого
+   этот игрок привёл. Свои цифры уходят пингом, отдельно их слать не надо. */
+async function bizSync(force){
+  if(PAY.mode !== 'live' || !PAY.backend) return;
+  if(!force && Date.now() - (S.biz.syncAt||0) < C.BIZ_SYNC_MIN*60000) return;
+  S.biz.syncAt = Date.now();
+  try{
+    const r = await fetch(PAY.backend + '/api/friends', { method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ initData:(tg && tg.initData) || '' })});
+    const d = await r.json();
+    if(!d || !d.ok) return;
+    S.biz.ok = 1;
+    if(Array.isArray(d.list)) S.biz.list = d.list.slice(0, C.BIZ_LIST_MAX);
+    if(cur === 'biz') renderBiz();
+    renderAlerts(); save();
+  }catch(e){}
+}
+
+/* ---- напоминание ----
+   Раз в BIZ_NUDGE_MIN минут или каждые BIZ_NUDGE_LVL уровня — что наступит
+   раньше. Когда сообщество уже собрано, зовём в BIZ_NUDGE_SLOW раз реже:
+   человек и так в теме, долбить его незачем. */
+function tickBizNudge(){
+  if(cur !== 'game') return;                        // не перебиваем другие вкладки
+  if($('#veil').classList.contains('on')) return;   // окно уже открыто
+  if(drag) return;                                  // не рвём перетаскивание
+  const m = bizActive() >= 3 ? C.BIZ_NUDGE_SLOW : 1;
+  if(!S.biz.nudgeAt){ S.biz.nudgeAt = Date.now(); S.biz.nudgeLvl = S.level; return; }
+  const byTime = Date.now() - S.biz.nudgeAt >= C.BIZ_NUDGE_MIN*60000*m;
+  const byLvl  = S.level - (S.biz.nudgeLvl|0) >= C.BIZ_NUDGE_LVL*m;
+  if(!byTime && !byLvl) return;
+  S.biz.nudgeAt = Date.now(); S.biz.nudgeLvl = S.level;
+  bizNudge(); save();
+}
+function bizNudge(){
+  const pend = bizPendAll() + bizRankPend(), a = bizActive(), r = bizRank();
+  let h = '<div class="bigem">🤝</div>';
+  if(pend > 0){
+    h += '<h3 class="sh-h">В сообществе ждут награды</h3>' +
+      '<p class="sh-p">Твои люди подросли. Незабранных вех: ' +
+      '<b style="color:var(--gem)">' + pend + '</b>.</p>';
+  } else if(a > 0){
+    h += '<h3 class="sh-h">' + r.name + '</h3>' +
+      '<p class="sh-p">В строю ' + a + '. ' +
+      (r.next ? 'Ещё ' + (r.next[0]-a) + ' — и «' + r.nextName + '» даст ' + rankRewardText(r.i) + '.'
+              : 'Штат укомплектован, дальше некуда.') + '</p>';
+  } else {
+    h += '<h3 class="sh-h">Собери бизнес-сообщество</h3>' +
+      '<p class="sh-p">Один в поле не мажор. Зови своих и соревнуйся по очкам лиги:<br>' +
+      '· алмазы за каждого, кто растёт;<br>' +
+      '· ' + Math.round(C.BIZ_SHARE_PCT*100) + '% с их добычи навсегда;<br>' +
+      '· магниты, посылки, бак и максимум монет — за размер штата.<br>' +
+      'Другу на входе — ' + C.BIZ_WELCOME_GEMS + ' 💎 и ' + C.BIZ_WELCOME_CHESTS + ' посылки.</p>';
+  }
+  openSheet(h + '<div class="sh-row"><button class="btn" data-act="close">Потом</button>' +
+    '<button class="btn gold" data-act="tobiz">Открыть</button></div>');
+}
+
+/* ---- экран ---- */
+function renderBiz(){
+  const all = bizList().slice().sort((a,b)=>
+    bizPend(b)-bizPend(a) || (b.pts|0)-(a.pts|0) || (b.lvl|0)-(a.lvl|0));
+  const r = bizRank(), pend = bizPendAll();
+  let h = '';
+
+  // шапка: ранг и штат
+  const rp = bizRankPend();
+  h += '<div class="pitybox"><div class="pt"><span>Ранг сообщества</span><span>' +
+    (r.next ? 'до «' + r.nextName + '» ещё ' + (r.next[0]-r.active) : 'потолок') + '</span></div>' +
+    '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px">' +
+    '<div style="min-width:0"><div style="font-family:var(--disp);font-weight:700;font-size:22px">' + r.name + '</div>' +
+    '<div style="font-size:11px;color:var(--muted);font-weight:700">' + r.active +
+      ' в строю · ' + all.length + ' всего</div></div>' +
+    (rp > 0
+      ? '<button class="buy gem" data-act="bizrank">Забрать ' + rp + '</button>'
+      : '<div style="text-align:right;font-size:11px;color:var(--muted);font-weight:700;line-height:1.5;min-width:0">' +
+        (r.next ? 'следующий порог<br><b style="color:var(--gold)">' + r.next[0] + ' в строю</b>'
+                : '<b style="color:var(--gold)">всё взято</b>') + '</div>') +
+    '</div><div class="track" style="margin-top:8px"><div class="fill gm" style="width:' +
+      (r.next ? Math.min(100, r.active/r.next[0]*100) : 100) + '%"></div></div></div>';
+
+  // приглашение
+  h += '<div style="display:flex;gap:8px;margin-bottom:10px">' +
+    '<button class="btn gold" data-act="bizshare">Позвать в сообщество</button>' +
+    '<button class="btn" data-act="bizcopy" style="flex:0 0 52px">🔗</button></div>';
+
+  // доход
+  h += '<h2 class="sec">Что уже принесло</h2>';
+  h += card('🏅','Вехи · ' + fmt(S.biz.stepGems|0) + ' 💎',
+    'Разовые награды за то, что твои люди растут.' +
+    (pend > 0 ? ' <b style="color:var(--gold)">Готово к выдаче: ' + pend + '</b>' : ''));
+  h += card('📈','Доля · ' + fmt(S.biz.got|0) + ' 💎',
+    Math.round(C.BIZ_SHARE_PCT*100) + '% со всех алмазов, что добывают твои люди. ' +
+    'Из кармана игры — у них ничего не убывает.');
+
+  // штат
+  h += '<h2 class="sec">Штат · награда за порог</h2><div class="steps two">';
+  for(let k=0;k<C.BIZ_RANKS.length;k++){
+    const q = C.BIZ_RANKS[k], reached = r.active >= q[0], paid = (S.biz.rankTaken|0) > k;
+    h += '<div class="step' + (paid ? ' got' : (reached ? ' now' : '')) + '">' +
+      '<span class="sl">' + q[0] + '</span>' +
+      '<span class="se">' + (paid ? '✅' : reached ? '🎁' : '👥') + '</span>' +
+      '<span class="st"><b>' + C.BIZ_RANK_NAMES[k+1] + '</b>' + rankRewardText(k, true) + '</span></div>';
+  }
+  h += '</div><div class="note">Награда за порог разовая: взял — осталось навсегда. ' +
+    'Считаются только те, кто дорос до ' + C.BIZ_MIN_LVL +
+    ' уровня, наиграл ' + C.BIZ_MIN_MIN + ' минут и заходил за последние ' +
+    C.BIZ_ACTIVE_DAYS + ' дней. Уснул — выпал из штата, вернулся — снова в строю.</div>';
+
+  // вехи
+  h += '<h2 class="sec">Вехи за каждого человека</h2><div class="steps">';
+  for(const st of C.BIZ_STEPS){
+    const p = [];
+    if(st[1]) p.push(st[1] + ' 💎');
+    if(st[2]) p.push(st[2] + ' 🧲');
+    if(st[3]) p.push('карта ' + st[3] + ' дн.');
+    h += '<div class="step"><span class="sl">' + st[0] + '</span>' +
+      '<span class="se">🏅</span><span class="st">ур. друга → ' + p.join(' · ') + '</span></div>';
+  }
+  h += '</div>';
+
+  // список
+  h += '<h2 class="sec">Список сообщества' + (all.length ? ' · ' + all.length : '') + '</h2>';
+  if(!all.length){
+    h += '<div class="card"><div class="ci">👤</div><div class="cb">' +
+      '<div class="ct">Пока никого</div>' +
+      '<div class="cd">Отправь ссылку — и первый человек появится здесь, ' +
+      'как только доберётся до ' + C.BIZ_MIN_LVL + ' уровня.</div></div></div>';
+  } else {
+    for(const f of all){
+      const real = bizReal(f), fresh = bizFresh(f), pn = bizPend(f);
+      const done = bizStepsGot(f), nx = C.BIZ_STEPS[Math.max(done, bizTaken(f.id))] || null;
+      const prog = nx ? Math.min(100, (f.lvl|0)/nx[0]*100) : 100;
+      const hrs = Math.round((f.min|0)/60);
+      const sub = real
+        ? ('ур. ' + (f.lvl|0) + ' · ' + fmt(f.pts|0) + ' очков · ' +
+           (hrs >= 1 ? hrs + ' ч' : (f.min|0) + ' мин') + ' в игре')
+        : ('ур. ' + (f.lvl|0) + ' · пока не в счёт: нужен ' + C.BIZ_MIN_LVL + ' ур.');
+      h += '<div class="frow' + (fresh && real ? (pn ? ' rdy' : '') : ' off') + '">' +
+        '<span class="fa">' + esc((f.n||'?').slice(0,1).toUpperCase()) + '</span>' +
+        '<span class="fb"><span class="fn">' + esc(f.n || 'Без имени') +
+          (fresh ? '' : ' 💤') + '</span>' +
+        '<span class="fs">' + sub + '</span>' +
+        '<span class="ft track"><span class="fill gm" style="display:block;width:' + prog + '%"></span></span></span>' +
+        (pn > 0
+          ? '<button class="buy gem fr" data-act="bizclaim" data-id="' + esc(f.id) + '">Забрать</button>'
+          : '<span class="fr" style="font-size:10px;font-weight:800;color:var(--dim)">' +
+            (nx ? 'до ' + nx[0] + ' ур.' : 'всё взято') + '</span>') +
+        '</div>';
+    }
+  }
+
+  h += '<h2 class="sec">Как это работает</h2>';
+  h += '<div class="note">Ссылка привязывает человека к тебе один раз и навсегда — ' +
+    'перепривязать нельзя, себя пригласить нельзя. Связь хранится на сервере, не в телефоне, ' +
+    'поэтому накрутить её сейвом не выйдет.<br><br>' +
+    'Вехи — разовые: друг дорос до ступени, ты забрал. Доля — постоянная: ' +
+    Math.round(C.BIZ_SHARE_PCT*100) + '% со всех алмазов, что он добывает в игре, и она не кончается. ' +
+    'Штат — про то, сколько людей играет прямо сейчас: порог берётся по активным, ' +
+    'а награда за него выдаётся один раз и остаётся навсегда.<br><br>' +
+    'Очки лиги в списке — те же, что в таблице лиги: они растут только от витрин ' +
+    'Олигарх, Престиж и Знаменитость. По ним и меряйтесь.</div>';
+
+  $('#bizBody').innerHTML = h;
 }
 
 /* ============ ЭНЕРГИЯ ============ */
@@ -1435,7 +1927,7 @@ function completeOrder(i){
   quest('coins', o.coins);
   let msg = '+' + fmt(o.coins) + ' 🪙  +' + o.xp + ' XP';
   if(o.chest){ S.pendingChests++; msg += '  +📦'; }
-  if(o.gems){ S.gems += o.gems; msg += '  +' + o.gems + ' 💎'; }
+  if(o.gems){ earnGems(o.gems); msg += '  +' + o.gems + ' 💎'; }
   toast(msg); SFX.order(); haptic('ok');
   quest('order', 1);
   if(nowCap > wasCap){
@@ -1510,7 +2002,7 @@ function claimDaily(i){
   const rw = DAILY_REWARDS[q.rw] || DAILY_REWARDS[0];
   let line = '';
   if(rw.k === 'chest'){ S.pendingChests += C.DAILY_CHESTS; line = '<b>' + C.DAILY_CHESTS + ' посылок</b> ждут во вкладке'; }
-  if(rw.k === 'gems'){  S.gems += C.DAILY_GEMS;            line = '<b style="color:var(--gem)">+' + C.DAILY_GEMS + ' 💎</b>'; }
+  if(rw.k === 'gems'){  earnGems(C.DAILY_GEMS);            line = '<b style="color:var(--gem)">+' + C.DAILY_GEMS + ' 💎</b>'; }
   if(rw.k === 'pts'){   S.ptsBank += C.DAILY_PTS;          line = '<b style="color:var(--gold)">+' + C.DAILY_PTS + ' очков лиги</b>'; }
   if(rw.k === 'bak'){   S.bakBonus = (S.bakBonus|0) + C.DAILY_BAK;
                         line = '<b style="color:var(--gold)">+' + C.DAILY_BAK + ' ⚡ к баку навсегда</b><br>Теперь бак ' + energyMax(); }
@@ -1612,7 +2104,7 @@ function weeklyPayout(){
   if(hadWeek && rank != null && rank >= 0){
     const prize = prizeFor(rank, di);
     if(prize > 0){
-      S.gems += prize;
+      earnGems(prize);
       setTimeout(()=>openSheet('<div class="bigem">🏆</div>' +
         '<h3 class="sh-h">Неделя закрыта</h3>' +
         '<p class="sh-p">Ты финишировал <b>' + (rank+1) + '-м</b> в дивизионе ' + divisions()[di][0] +
@@ -1670,7 +2162,7 @@ function vipBuy(i,t){
   S.vip[t].push(i);
   /* Каждый выкупленный предмет: алмазы, плюс к баку и шаг к росту сброса.
      Бак и сброс считаются от числа выкупленного, отдельных полей не заводим. */
-  S.gems += C.VIP_GEMS;
+  earnGems(C.VIP_GEMS);
   SFX.coin(); haptic('ok');
   toast(nameOf(vipLvl(i)) + ' в состоянии · +' + fmt(vipPts(i,t)) + ' очков · +' +
     C.VIP_GEMS + ' 💎 · +' + C.VIP_ENERGY + ' ⚡ к баку');
@@ -2018,7 +2510,7 @@ function openVault(i){
     line = '<b style="color:var(--gold)">+' + Math.round(lo.n*100) + '% к максимуму монет</b><br>' +
            'Теперь потолок ' + fmt(coinCap()) + ' 🪙';
   } else if(lo.kind === 'gems'){
-    S.gems += lo.n;
+    earnGems(lo.n);
     line = '<b style="color:var(--gem)">+' + lo.n + ' 💎</b>';
   } else {
     S.magnets = (S.magnets|0) + lo.n;
@@ -2794,6 +3286,7 @@ function renderAll(){
   if(cur === 'chest')  renderChests();
   if(cur === 'league') renderLeague();
   if(cur === 'vip')    renderVip();
+  if(cur === 'biz')    renderBiz();
   renderTiers();
   renderAlerts();
 }
@@ -2802,6 +3295,9 @@ function renderAlerts(){
     (S.quests||[]).some(x=>x.claim) || (S.daily||[]).some(x=>x.claim));
   document.querySelector('.tab[data-s="shop"]').classList.toggle('alert',
     S.offers.length > 0 || weekendActive() || (!S.starterDone && S.starterUntil > Date.now()));
+  const bb = $('#bizbar');
+  bb.classList.toggle('alert', bizPendAll() > 0 || bizRankPend() > 0);
+  $('#bizN').textContent = bizList().length ? bizActive() + '/' + bizList().length : '';
   document.querySelector('.tab[data-s="chest"]').classList.toggle('alert',
     S.pendingChests > 0 || S.itemChests > 0 || (isPremium() && S.dailyChestDay !== dayKey()));
 }
@@ -2887,7 +3383,7 @@ function tapCell(i){
       S.energy += specialEnergy();
       toast('Генератор: +' + specialEnergy() + ' ⚡'); SFX.gem();
     } else if(sp.type === 'gems'){
-      S.gems += C.SPECIAL_GEMS;
+      earnGems(C.SPECIAL_GEMS);
       toast('Копилка: +' + C.SPECIAL_GEMS + ' 💎'); SFX.gem();
     } else if(sp.type === 'chest'){
       S.itemChests++;
@@ -2913,6 +3409,7 @@ document.querySelectorAll('.tier').forEach(b=>b.addEventListener('click', ()=>{
 $('#reroll').addEventListener('click', rerollOrders);
 $('#orders').addEventListener('click', e=>{ const b = e.target.closest('[data-o]'); if(b) completeOrder(+b.dataset.o); });
 $('#hGemBtn').addEventListener('click', ()=>go('shop'));
+$('#bizbar').addEventListener('click', ()=>{ go('biz'); bizSync(true); });
 $('#hSnd').addEventListener('click', ()=>{ S.sound = S.sound === false; if(S.sound) SFX.gem(); renderHud(); save(); });
 document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click', ()=>go(t.dataset.s)));
 $('#veil').addEventListener('click', e=>{ if(e.target === $('#veil')) closeSheet(); });
@@ -2924,6 +3421,11 @@ document.addEventListener('click', e=>{
     case 'yes': $('#veil').classList.remove('on'); if(askRes){ askRes(true); askRes = null; } return;
     case 'no': closeSheet(); return;
     case 'toshop': closeSheet(); go('shop'); return;
+    case 'tobiz':  closeSheet(); go('biz'); bizSync(true); return;
+    case 'bizshare': bizShare(); return;
+    case 'bizcopy':  bizCopy(); return;
+    case 'bizclaim': bizClaim(b.dataset.id); return;
+    case 'bizrank':  bizClaimRank(); return;
     case 'pack': PAY.buy(b.dataset.id); return;
     case 'gbuy': { const id = b.dataset.id; if(inSheet) $('#veil').classList.remove('on'); gemBuy(id); return; }
     case 'sell': {
@@ -3009,6 +3511,8 @@ function loop(){
     const l = Math.max(0, S.orderCdUntil - Date.now());
     em.forEach(e=>{ if(e.textContent.indexOf('🔒') < 0) e.textContent = l > 0 ? mmss(l) : '…'; });
   }
+  tickBizNudge();
+  if(cur === 'biz') bizSync(false);
   const offersChanged = tickOffers();
   if(cur === 'shop' && (offersChanged || S.offers.length || S.starterUntil > Date.now()
       || S.drop2Until > Date.now() || coinCdLeft('coins_1') > 0 || coinCdLeft('coins_2') > 0)) renderShop();
@@ -3035,6 +3539,9 @@ function boot(){
   requestAnimationFrame(sizeBoard);
   loadCloud();
   pullServer();                  // вдруг платёж прошёл, пока игра была закрыта
+  bizCatchRef();                 // пришёл по чьей-то ссылке — запоминаем один раз
+  // сразу отдаём серверу привязку и свои цифры, следом просим список
+  setTimeout(()=>{ sendPing(false, true); bizSync(true); }, 1500);
   setInterval(loop, 1000);
   save();
   if(weekendActive()) setTimeout(()=>openSheet(
