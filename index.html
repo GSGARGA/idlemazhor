@@ -123,6 +123,12 @@ main{flex:1;min-height:0;position:relative}
   border:2px solid var(--rc,var(--r1));
   box-shadow:0 3px 0 rgba(0,0,0,.4), 0 0 14px -7px var(--rc,var(--r1));
   font-size:calc(var(--cell,60px) * .54);line-height:1}
+/* Сейф Мажора: золотая обводка и мягкое свечение, чтобы его нельзя было спутать с вещью */
+.item.vault{background:linear-gradient(180deg,#2A2415,#161208);
+  box-shadow:0 3px 0 rgba(0,0,0,.4), 0 0 18px -4px var(--rc);
+  animation:vaultp 1.8s ease-in-out infinite}
+@keyframes vaultp{0%,100%{box-shadow:0 3px 0 rgba(0,0,0,.4), 0 0 14px -6px var(--rc)}
+  50%{box-shadow:0 3px 0 rgba(0,0,0,.4), 0 0 22px -2px var(--rc)}}
 .item .lv{position:absolute;bottom:0;right:4px;font-size:calc(var(--cell,60px) * .2);font-weight:800;
   color:var(--rc,var(--r1));font-family:var(--disp)}
 /* Подсветка под значком. Оттенок свой на каждый уровень (--lc ставит renderBoard),
@@ -413,7 +419,7 @@ h2.sec:first-child{margin-top:0}
 
 /* ============ БЛОК КОНСТАНТ (весь баланс здесь) ============ */
 const C = {
-  SAVE_VERSION:      26,      // версия сейва; при росте запускается migrate()
+  SAVE_VERSION:      27,      // версия сейва; при росте запускается migrate()
   SAVE_KEY:          'bvs_save',
   SAVE_DEBOUNCE_MS:  700,    // задержка перед записью сейва
 
@@ -483,6 +489,12 @@ const C = {
   CAP_COIN_PER_HOUR: 1,      // сколько раз в час можно поднять потолок за все монеты
   CAP_GEM_PER_HOUR:  3,      // сколько раз в час можно поднять потолок за алмазы
   CAP_GEM_PRICE:     30,     // цена такой докупки, алмазов
+
+  // Сейф Мажора — редкая находка на поле. Шанс и содержимое зависят от редкости.
+  VAULT_CHANCE:  [0.05, 0.02, 0.01, 0.005, 0.001],  // шанс сейфа по редкостям
+  VAULT_CAP_PCT: [0.01, 0.02, 0.05, 0.10, 0.20],    // прибавка к максимуму монет
+  VAULT_GEMS:    [1, 2, 3, 5, 15],                  // алмазов внутри
+  VAULT_MAGNETS: [1, 2, 3, 4, 5],                   // магнитов внутри
   ORDER_CHEST_CHANCE:0.20,   // шанс посылки в награду
   ORDER_GEM_CHANCE:  0.14,   // шанс алмазов в награду
   ORDER_GEMS:        [3,8],  // сколько алмазов может дать заказ
@@ -490,6 +502,7 @@ const C = {
   QUEST_REACH_SPREAD: 13,    // насколько выше сброса бывает цель задания «собери предмет»
   QUEST_HAND:        [7,15], // сколько ручных слияний просит задание
   QUEST_SELL:        8,      // сколько предметов просит продать задание
+  QUEST_VAULT:       5,      // сколько сейфов просит вскрыть задание
   REROLL_FREE_DAY:   1,      // бесплатных смен всех заказов в день
   REROLL_GEMS:       20,     // цена смены заказов сверх лимита
 
@@ -530,9 +543,9 @@ const C = {
 
   QUEST_COUNT:       3,      // сколько заданий в наборе
   QUEST_HOURS:       1,      // как часто набор заданий меняется, часов
-  QUEST_GEMS:        40,     // алмазов за выполненное задание
+  QUEST_GEMS:        [10, 20, 40],  // алмазов за задание по месту в наборе
   QUEST_REROLL_FREE: 1,      // бесплатных обновлений списка заданий в день
-  QUEST_REROLL_GEMS: 30,     // цена обновления заданий сверх лимита
+  QUEST_REROLL_GEMS: 50,     // цена обновления заданий сверх лимита
 
   VIP_COUNT:         50,     // предметов в каждой витрине
   // Цены: от первой до последней внутри тира, диапазоны не пересекаются
@@ -907,6 +920,9 @@ function migrate(raw){
     /* v20 → v21: заряд перестал выводиться из уровня и хранится в предмете.
        Старым заряженным вещам проставляем тип по прежнему правилу кратностей,
        чтобы сохранённые Кассы и Станки не превратились в пустышки. */
+    // v26 → v27: в клетке может лежать сейф — у него своя редкость и нет зарядов
+    const vault = (it.vault != null && it.vault >= 0 && it.vault < 5) ? (it.vault|0) : null;
+    if(vault != null) return { l, ch:null, sp:null, vault };
     let sp = it.sp;
     if(sp == null && it.ch != null) sp = oldSpecialIdx(l);
     if(sp != null && !SPECIALS[sp]) sp = null;
@@ -1122,6 +1138,25 @@ function chargeBonus(l){
   const slow = Math.max(0, Math.floor((l - C.SPECIAL_CH_MAX*C.SPECIAL_CH_STEP) / C.SPECIAL_CH_SLOW));
   return fast + slow;
 }
+/* Сейф Мажора. Выпадает вместо обычного предмета: занимает клетку, не сливается,
+   тапом отдаёт содержимое и исчезает. Редкость решается одним броском —
+   от мифической к обычной, чтобы редкая не съедала шанс частой. */
+function rollVault(){
+  const r = Math.random();
+  let acc = 0;
+  for(let i = C.VAULT_CHANCE.length - 1; i >= 0; i--){
+    acc += C.VAULT_CHANCE[i];
+    if(r < acc) return i;
+  }
+  return null;
+}
+// что лежит в сейфе этой редкости: тип выбирается поровну из трёх
+function vaultLoot(rar){
+  const kind = (Math.random() * 3) | 0;
+  if(kind === 0) return { kind:'cap',    n:C.VAULT_CAP_PCT[rar] };
+  if(kind === 1) return { kind:'gems',   n:C.VAULT_GEMS[rar] };
+  return              { kind:'magnets', n:C.VAULT_MAGNETS[rar] };
+}
 // что навесить на только что созданный предмет: {sp, ch} либо пусто
 function rollSpecial(l){
   if(Math.random() >= C.SPECIAL_CHANCE) return { sp:null, ch:null };
@@ -1189,7 +1224,9 @@ function spawn(l, at){
   l = clamp(l, 1, C.MAX_LVL);
   const i = (at != null && !S.board[at]) ? at : firstEmpty();
   if(i < 0){ toast('Класть некуда'); return -1; }
-  S.board[i] = Object.assign({ l }, rollSpecial(l));
+  const vr = rollVault();
+  S.board[i] = vr == null ? Object.assign({ l }, rollSpecial(l))
+                          : { l, ch:null, sp:null, vault:vr };
   checkFull();
   if(l > S.seen) S.seen = l;
   return i;
@@ -1225,6 +1262,8 @@ function genTap(){
 function tryMerge(from,to,quiet){
   const a = S.board[from], b = S.board[to];
   if(!a || !b || a.l !== b.l) return false;
+  // Сейф — не предмет цепочки: его не сливают, а вскрывают тапом
+  if(a.vault != null || b.vault != null) return false;
   if(a.l >= C.MAX_LVL){ if(!quiet) toast('Выше некуда'); return false; }   // упираемся только в технический потолок
   const nl = a.l + 1;
   S.board[from] = null;
@@ -1393,6 +1432,7 @@ const QUESTS = [
   { id:'hand',  text:n=>'Объедини вручную ' + n + ' раз',  goal:()=>rndInt(C.QUEST_HAND[0], C.QUEST_HAND[1]) },
   { id:'fill',  text:()=>'Заполни всё поле',               goal:()=>1 },
   { id:'sell',  text:n=>'Продай ' + n + ' любых предметов', goal:()=>C.QUEST_SELL },
+  { id:'vault', text:n=>'Открой ' + n + ' Сейфов Мажора 🔐', goal:()=>C.QUEST_VAULT },
 ];
 function rollQuests(){
   const pool = QUESTS.slice(), out = [];
@@ -1439,13 +1479,15 @@ function rerollQuests(){
   renderAll(); save();
 }
 // Награда за задание. Каждые GEN_STEP_QUESTS заданий поднимают сброс банкомата.
+// Награда зависит от места в наборе: первое задание дешевле, третье жирнее
+const questGems = i => C.QUEST_GEMS[Math.min(i, C.QUEST_GEMS.length - 1)];
 function claimQuest(i){
   const q = S.quests[i];
   if(!q || !q.claim) return;
   q.claim = false;
   const wasMin = genMin();
   S.questsDone++;
-  addGems(C.QUEST_GEMS, 'Задание');
+  addGems(questGems(i), 'Задание');
   const nowMin = genMin();
   if(nowMin > wasMin){
     SFX.level(); haptic('ok');
@@ -1867,6 +1909,32 @@ function chestCoinLeft(){
   if(S.chestHour !== hourKey()) return C.CHEST_COIN_PER_HOUR;
   return Math.max(0, C.CHEST_COIN_PER_HOUR - (S.chestUsed|0));
 }
+/* Вскрытие сейфа: содержимое зависит от редкости, тип выбирается случайно. */
+function openVault(i){
+  const it = S.board[i]; if(!it || it.vault == null) return;
+  const rar = it.vault, lo = vaultLoot(rar);
+  S.board[i] = null;
+  quest('vault', 1);
+  let line = '';
+  if(lo.kind === 'cap'){
+    S.capMul = Math.max(1, S.capMul||1) * (1 + lo.n);
+    line = '<b style="color:var(--gold)">+' + Math.round(lo.n*100) + '% к максимуму монет</b><br>' +
+           'Теперь потолок ' + fmt(coinCap()) + ' 🪙';
+  } else if(lo.kind === 'gems'){
+    S.gems += lo.n;
+    line = '<b style="color:var(--gem)">+' + lo.n + ' 💎</b>';
+  } else {
+    S.magnets = (S.magnets|0) + lo.n;
+    line = '<b style="color:var(--purple)">+' + lo.n + ' 🧲</b><br>Всего магнитов: ' + S.magnets;
+  }
+  SFX.chest(rar); haptic(rar >= 2 ? 'ok' : 'light');
+  openSheet('<div class="bigem">🔐</div>' +
+    '<h3 class="sh-h" style="color:var(' + RAR_VAR[rar] + ')">Сейф Мажора · ' + RARITY[rar] + '</h3>' +
+    '<p class="sh-p">' + line + '</p>' +
+    '<div class="sh-row"><button class="btn gr" data-act="close">Забрать</button></div>');
+  renderAll(); save();
+}
+
 /* ---------- ОКНО ПОТОЛКА КОШЕЛЬКА ----------
    Открывается тапом по монетам в шапке. Показывает текущий потолок и две докупки:
    за все монеты (раз в час) и за алмазы (трижды в час). Обе поднимают на CAP_UP_PCT. */
@@ -2158,8 +2226,15 @@ function renderBoard(){
     const it = S.board[i], cur = cell.firstChild;
     if(!it){ if(cur) cell.innerHTML = ''; continue; }
     const rar = rarOf(it.l);
-    const sig = it.l + ':' + (it.ch == null ? '-' : it.ch) + ':' + (it.sp == null ? '-' : it.sp);
+    const sig = it.l + ':' + (it.ch == null ? '-' : it.ch) + ':' + (it.sp == null ? '-' : it.sp)
+      + ':' + (it.vault == null ? '-' : 'v' + it.vault);
     if(cur && cur.dataset && cur.dataset.sig === sig) continue;
+    if(it.vault != null){
+      cell.innerHTML = '<div class="item vault" data-sig="' + sig + '" style="--rc:var(' +
+        RAR_VAR[it.vault] + ')"><span class="em">🔐</span>' +
+        '<span class="lv">' + RARITY[it.vault][0] + '</span></div>';
+      continue;
+    }
     const sp = specialOf(it), gx = galaxyOf(it.l);
     cell.innerHTML = '<div class="item r' + (rar+1) + (sp ? ' special' : '') + (gx > 1 ? ' galaxy' : '') + '" data-sig="' + sig +
       '" style="--rc:var(' + RAR_VAR[rar] + ');--lc:' + lvlHue(it.l) + ';' + lvlBg(it.l) + '">' +
@@ -2328,8 +2403,8 @@ function renderTasks(){
       '<div class="cb"><div class="ct">' + def.text(q.goal) + '</div>' +
       '<div class="cd">' + fmt(Math.min(q.cur,q.goal)) + ' из ' + fmt(q.goal) + '</div>' +
       '<div class="track" style="margin-top:6px"><div class="fill xp" style="width:' + pct + '%"></div></div></div>' +
-      (q.claim ? '<button class="buy gem" data-act="quest" data-i="' + i + '">' + C.QUEST_GEMS + ' 💎</button>'
-               : '<button class="buy" disabled>' + C.QUEST_GEMS + ' 💎</button>') + '</div>';
+      (q.claim ? '<button class="buy gem" data-act="quest" data-i="' + i + '">' + questGems(i) + ' 💎</button>'
+               : '<button class="buy" disabled>' + questGems(i) + ' 💎</button>') + '</div>';
   }
   h += card('🔄','Не нравятся задания?',
     S.questRerollLeft > 0 ? 'В этом часу можно обновить бесплатно.' : 'Бесплатное обновление уже было. Дальше за алмазы.',
@@ -2535,13 +2610,19 @@ function helpSheet(){
         ? 'каждое задание поднимает сброс ровно на один уровень'
         : 'каждые ' + C.GEN_STEP_QUESTS + ' заданий — плюс один уровень, до следующего роста ' + questsToNextGen()) +
       '. Заданий ' + C.QUEST_COUNT +
-      ' в наборе, набор меняется каждый час, там же кнопка обновления. ' +
+      ' в наборе, награда за них ' + C.QUEST_GEMS.join(', ') + ' 💎 — чем ниже в списке, тем жирнее. ' +
+      'Набор меняется каждый час, обновить досрочно можно за ' + C.QUEST_REROLL_GEMS + ' 💎. ' +
       'Сброс стоит <b>' + tapCost() + ' ⚡</b> и дорожает на единицу каждые ' + C.TAP_COST_STEP +
       ' уровней игрока — бак при этом тоже растёт.') +
     legalRow('👑','Каждый выкупленный предмет витрин Олигарха, Престижа и Знаменитости даёт <b>+' +
       C.VIP_GEMS + ' 💎</b> и <b>+' + C.VIP_ENERGY + ' ⚡</b> к баку навсегда. Каждые ' + C.VIP_STEP_GEN +
       ' выкупленных предметов поднимают минимальный сброс банкомата на уровень — как задания. ' +
       'Сейчас выкуплено: ' + vipCount() + '.') +
+    legalRow('🔐','<b>Сейф Мажора</b> иногда падает вместо обычной вещи — шанс ' +
+      (C.VAULT_CHANCE.reduce((a,b)=>a+b,0)*100).toFixed(1) + '%. Он не сливается, его вскрывают тапом. ' +
+      'Внутри одно из трёх: прибавка к максимуму монет, алмазы или магниты — чем реже сейф, тем жирнее. ' +
+      'Мифический даёт +' + Math.round(C.VAULT_CAP_PCT[4]*100) + '% к максимуму, ' + C.VAULT_GEMS[4] +
+      ' 💎 или ' + C.VAULT_MAGNETS[4] + ' 🧲.') +
     legalRow('🏦','У кошелька есть потолок: <b>' + fmt(coinCap()) + ' 🪙</b>. Он равен ' + C.COIN_CAP_MULT +
       ' самым жирным сданным заказам, но не ниже ' + fmt(C.COIN_CAP_MIN) + '. Монеты сверх потолка не приходят, ' +
       'так что поднимай планку заказами подороже.') +
@@ -2667,6 +2748,7 @@ $('#board').addEventListener('pointercancel', ()=>{
 });
 function tapCell(i){
   const it = S.board[i]; if(!it) return;
+  if(it.vault != null){ openVault(i); return; }
   const sp = specialOf(it);
   if(sp && it.ch != null && it.ch > 0){
     if(sp.type === 'producer'){
