@@ -541,6 +541,8 @@ const C = {
   LVL_REWARD_BONUS:  0.5,
   LVL_REWARD_CAP:    10,
   LVL_GEM_DIV:       2,      // во столько раз режем алмазы за уровень
+  LVL_GEM_LATE:      50,     // с этого уровня алмазов за уровень вдвое меньше
+  LVL_GEM_LATE_DIV:  2,      // во столько раз режем после него
 
   ENERGY_MAX:        100,    // стартовый максимум энергии
   ENERGY_GEMS_PER_100: 60,   // алмазов за 100 энергии в магазине
@@ -1490,12 +1492,15 @@ function tapCost(){ return C.ENERGY_TAP_COST + Math.floor(S.level / C.TAP_COST_S
 const rewardMult = l => Math.min(C.LVL_REWARD_CAP, 1 + C.LVL_REWARD_BONUS * Math.floor(l / C.LVL_REWARD_STEP));
 function levelReward(l){
   const m = rewardMult(l);
-  if(l % 10 === 0){ const n = Math.max(1, Math.round((75 + l*2) * m / C.LVL_GEM_DIV));
+  /* После LVL_GEM_LATE алмазы за уровень режем ещё вдвое: множитель награды
+     к этому моменту уже разогнался, и дальше выплаты росли слишком быстро. */
+  const d = C.LVL_GEM_DIV * (l > C.LVL_GEM_LATE ? C.LVL_GEM_LATE_DIV : 1);
+  if(l % 10 === 0){ const n = Math.max(1, Math.round((75 + l*2) * m / d));
     return { kind:'gems', n, em:'💎', text:fmt(n) + ' алмазов' }; }
   if(l % 5 === 0){ const n = Math.round(2 * m);
     return { kind:'chest', n, em:'📦', text:n + (n === 1 ? ' посылка' : n < 5 ? ' посылки' : ' посылок') }; }
   if(l % 3 === 0) return { kind:'boost', em:'🤑', text:'Банкомат сошёл с ума' };
-  const n = Math.max(1, Math.round((10 + Math.floor(l/4)*5) * m / C.LVL_GEM_DIV));
+  const n = Math.max(1, Math.round((10 + Math.floor(l/4)*5) * m / d));
   return { kind:'gems', n, em:'💎', text:fmt(n) + ' алмазов' };
 }
 function giveLevelReward(l){
