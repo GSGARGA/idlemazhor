@@ -154,6 +154,11 @@ main{flex:1;min-height:0;position:relative}
 #ghost{position:fixed;pointer-events:none;z-index:90;transform:translate(-50%,-50%) scale(1.12);
   filter:drop-shadow(0 8px 12px rgba(0,0,0,.6));display:none}
 
+/* Заказ, который нечем сдать, но хватает подрядчиков */
+.order.crew{border-color:#8A6A1E}
+.order .crewb{position:absolute;top:2px;left:3px;font-size:11px;line-height:1;
+  filter:drop-shadow(0 1px 1px rgba(0,0,0,.7))}
+
 /* ---------- ТОЛЬКО ВЕРТИКАЛЬНО ---------- */
 /* Если телефон всё-таки повернули — вместо поехавшей вёрстки просим повернуть
    обратно. Перекрывает всё, включая открытые окна. */
@@ -233,6 +238,27 @@ main{flex:1;min-height:0;position:relative}
   display:flex;align-items:center;gap:10px;margin-bottom:7px}
 .vip.t1{border-color:#D9A227;box-shadow:0 0 0 1px #6A4E10, 0 0 14px -8px #FFCE3D}
 .vip.t2{border-color:#8FE6FF;box-shadow:0 0 0 1px #2E6C82, 0 0 16px -8px #8FE6FF}
+/* Ещё не по очереди: гасим, но цену и награду оставляем видимыми */
+.vip.locked{opacity:.42;border-color:var(--line);box-shadow:none}
+/* Веха, открывающая Сейфы Мажора */
+.vip .pill.v{background:#2A1B33;border-color:#7A4FA0;color:#D6A8FF;margin-left:5px}
+.vip .vlock{color:#C79BF0;font-weight:800;font-size:10.5px}
+
+/* ---------- БАГАЖНИК ---------- */
+.bag{display:grid;grid-template-columns:repeat(5,1fr);gap:7px;margin-bottom:9px}
+.bagc{position:relative;aspect-ratio:1;border-radius:13px;display:flex;
+  align-items:center;justify-content:center;overflow:hidden;
+  background:linear-gradient(180deg,#0F1620,#0A1017);
+  border:1px solid #24313F;box-shadow:inset 0 1px 0 rgba(255,255,255,.04)}
+.bagc .bi{font-size:24px;line-height:1;filter:drop-shadow(0 2px 3px rgba(0,0,0,.7))}
+.bagc .bn{position:absolute;right:3px;bottom:2px;min-width:16px;padding:0 4px;
+  border-radius:99px;background:#0A1017;border:1px solid #3A5068;
+  font-size:10px;font-weight:800;color:var(--ink);line-height:15px;text-align:center}
+.bagc.zero{opacity:.5}
+.bagc.zero .bn{color:var(--dim)}
+.bagc.empty{border-style:dashed;border-color:#1E2A36;background:#0A0E13}
+.bagc.empty .bi{font-size:17px;color:#2C3A48;filter:none;font-weight:800}
+.bagc:active{transform:scale(.94)}
 .vip .vi{font-size:26px;width:34px;text-align:center;flex:0 0 auto}
 .vip .vb{flex:1;min-width:0}
 .vip .vt{font-weight:800;font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -479,7 +505,7 @@ h2.sec:first-child{margin-top:0}
 
 /* ============ БЛОК КОНСТАНТ (весь баланс здесь) ============ */
 const C = {
-  SAVE_VERSION:      30,      // версия сейва; при росте запускается migrate()
+  SAVE_VERSION:      31,      // версия сейва; при росте запускается migrate()
   SAVE_KEY:          'bvs_save',
   SAVE_DEBOUNCE_MS:  700,    // задержка перед записью сейва
 
@@ -489,7 +515,7 @@ const C = {
   PAY_WATCH_MIN:     5,      // сколько минут игра доспрашивает сервер, если оплату не подтвердил клиент
   PAY_WATCH_SEC:     3,      // как часто она это делает, с
   PAY_SYNC_SEC:      20,     // через сколько секунд после покупки тихо сверить счёт с сервером, с
-  PING_EVERY_SEC:    300,    // как часто отправлять на сервер накопленное время в игре, с
+  PING_EVERY_SEC:    900,    // как часто отправлять на сервер накопленное время в игре, с
   PING_MIN_SEC:      20,     // меньше этого не отправляем — не гоняем сеть впустую, с
   LIVE_IDLE_MIN:     5,      // ни одного касания столько минут — время в игре не считаем
   BOARD_COLS:        5,      // колонок на поле
@@ -562,6 +588,26 @@ const C = {
   VAULT_CAP_PCT: [0.01, 0.02, 0.05, 0.10, 0.20],    // прибавка к максимуму монет
   VAULT_GEMS:    [1, 2, 3, 5, 15],                  // алмазов внутри
   VAULT_MAGNETS: [1, 2, 3, 4, 5],                   // магнитов внутри
+  VAULT_MAGNET_CHANCE: 0.10,   // шанс, что в сейфе окажутся магниты
+  VAULT_CREW_CHANCE:   0.10,   // и столько же — что подрядчики; остаток поровну
+  VAULT_CREW: [1, 2, 3, 4, 5],                      // подрядчиков внутри по редкостям
+  /* Сейфы начинают падать не сразу, а с этого предмета витрины (индекс).
+     19 — это «Самолёт», двадцатый по счёту, уровень 40. До него сейфов нет. */
+  VAULT_UNLOCK_VIP:  19,
+
+  /* ===== БАГАЖНИК ===== инвентарь, куда падает особый лут.
+     Первый предмет — Подрядчик: закрывает заказ, даже если вещи нет на поле.
+     Цена растёт за каждый закрытый сегодня заказ, в полночь снова с начала —
+     иначе накопленной пачкой можно было бы разом снести весь прогресс. */
+  CREW_COST: [1, 3, 5, 10, 15, 20, 25, 30, 40, 50],
+  BAG_SLOTS:         10,     // мест в багажнике; свободные показываем заглушкой
+  BATTERY_ENERGY:    100,    // сколько энергии доливает Аккумулятор
+  /* Аккумуляторы начинают падать с этого предмета витрины (индекс).
+     29 — это «Цех», тридцатый по счёту, уровень 60. До него их не бывает. */
+  BATTERY_UNLOCK_VIP: 29,
+  BATTERY_TAP_CHANCE: 0.005,  // шанс аккумулятора за тап по банкомату
+  START_CREW:        1,      // подрядчиков на старте игры
+  START_BATTERY:     3,      // и аккумуляторов
   ORDER_CHEST_CHANCE:0.20,   // шанс посылки в награду
   ORDER_GEM_CHANCE:  0.14,   // шанс алмазов в награду
   ORDER_GEMS:        [3,8],  // сколько алмазов может дать заказ
@@ -1027,6 +1073,10 @@ function fresh(){
     capHour:'', capCoinUsed:0, capGemUsed:0,   // час и сколько докупок в нём сделано
     daily:[], bakBonus:0,  // задания на день и прибавка к баку, добытая ими
     magnets:0, mergeStreak:0,   // заряды магнита и счётчик ручных слияний до следующего
+    crew:C.START_CREW, battery:C.START_BATTERY,   // багажник: стартовый набор
+    crewDay:'', crewUsed:0,          // день и сколько заказов закрыто подрядчиками
+    vaultOn:0,             // выкуплен Самолёт — сейфы начали падать. Круг престижа это не сбрасывает
+    batOn:0,               // выкуплен Цех — аккумуляторы тоже пошли
     coinCd:{},                  // до какого времени пакеты монет на кулдауне
     galaxySeen:1,               // до какого витка цепочки уже показывали поздравление
     cycle:1,                    // круг престижа: 1, 2, 3, ... без потолка
@@ -1141,6 +1191,19 @@ function migrate(raw){
   if(typeof s.payPack !== 'string') s.payPack = '';
   s.magnets = Math.max(0, s.magnets|0);
   s.mergeStreak = clamp(s.mergeStreak|0, 0, C.MAGNET_PER_MERGES-1);
+  // v30 → v31: багажник и подрядчики
+  s.crew = Math.max(0, s.crew|0);
+  s.battery = Math.max(0, s.battery|0);   // v31: аккумуляторы
+  s.crewDay = String(s.crewDay || '');
+  s.crewUsed = Math.max(0, s.crewUsed|0);
+  /* v31: сейфы отпираются Самолётом. Тем, кто его уже проходил в этом круге
+     или в прошлых, отпираем сразу — иначе отняли бы то, что у них было. */
+  s.vaultOn = (s.vaultOn|0) ? 1
+    : ((Array.isArray(s.vip) && Array.isArray(s.vip[0]) && s.vip[0].indexOf(C.VAULT_UNLOCK_VIP) >= 0)
+       || (s.vipEver|0) > C.VAULT_UNLOCK_VIP ? 1 : 0);
+  s.batOn = (s.batOn|0) ? 1
+    : ((Array.isArray(s.vip) && Array.isArray(s.vip[0]) && s.vip[0].indexOf(C.BATTERY_UNLOCK_VIP) >= 0)
+       || (s.vipEver|0) > C.BATTERY_UNLOCK_VIP ? 1 : 0);
   if(!Array.isArray(s.orders)) s.orders = [];
   s.orders = s.orders.filter(o=>o && typeof o.l === 'number');
   s.v = C.SAVE_VERSION;
@@ -1376,7 +1439,11 @@ function chargeBonus(l){
 /* Сейф Мажора. Выпадает вместо обычного предмета: занимает клетку, не сливается,
    тапом отдаёт содержимое и исчезает. Редкость решается одним броском —
    от мифической к обычной, чтобы редкая не съедала шанс частой. */
+/* Сейфы Мажора отпираются Самолётом — предметом витрины №20.
+   До него их не существует: иначе новичок получал бы прибавку к максимуму
+   монет раньше, чем узнаёт, что такое максимум. */
 function rollVault(){
+  if(!S.vaultOn) return null;
   const r = Math.random();
   let acc = 0;
   for(let i = C.VAULT_CHANCE.length - 1; i >= 0; i--){
@@ -1386,11 +1453,17 @@ function rollVault(){
   return null;
 }
 // что лежит в сейфе этой редкости: тип выбирается поровну из трёх
+/* Что внутри сейфа. Магниты вынесены в отдельный шанс, а не в равную треть:
+   магнит слипает всё поле сразу, это самая сильная вещь в игре, и сыпать её
+   в каждом третьем сейфе слишком щедро. Остаток делится поровну между
+   прибавкой к максимуму монет и алмазами. */
 function vaultLoot(rar){
-  const kind = (Math.random() * 3) | 0;
-  if(kind === 0) return { kind:'cap',    n:C.VAULT_CAP_PCT[rar] };
-  if(kind === 1) return { kind:'gems',   n:C.VAULT_GEMS[rar] };
-  return              { kind:'magnets', n:C.VAULT_MAGNETS[rar] };
+  const r = Math.random();
+  if(r < C.VAULT_MAGNET_CHANCE) return { kind:'magnets', n:C.VAULT_MAGNETS[rar] };
+  if(r < C.VAULT_MAGNET_CHANCE + C.VAULT_CREW_CHANCE) return { kind:'crew', n:C.VAULT_CREW[rar] };
+  return Math.random() < 0.5
+    ? { kind:'cap',  n:C.VAULT_CAP_PCT[rar] }
+    : { kind:'gems', n:C.VAULT_GEMS[rar] };
 }
 // что навесить на только что созданный предмет: {sp, ch} либо пусто
 function rollSpecial(l){
@@ -1848,6 +1921,11 @@ function genTap(){
     const i = spawn(genRoll());
     if(i >= 0) popCell(i);
   }
+  // Аккумулятор изредка приходит прямо с тапа — но только после «Цеха»
+  if(S.batOn && Math.random() < C.BATTERY_TAP_CHANCE){
+    S.battery = (S.battery|0) + 1;
+    toast('🔋 Аккумулятор в багажник'); SFX.gem(); haptic('ok');
+  }
   SFX.tap(); haptic('light');
   quest('tap', 1);
   renderAll(); save();
@@ -1969,11 +2047,125 @@ function fillOrders(){
   while(S.orders.length < orderSlots()) S.orders.push(makeOrder());
   if(S.orders.length > orderSlots()) S.orders.length = orderSlots();
 }
+/* ---------- БАГАЖНИК ----------
+   Инвентарь особого лута. Новый предмет добавляется одной строкой в BAG:
+   id, иконка, название, сколько есть, короткая подпись и полное описание.
+   Мест всегда BAG_SLOTS — пустые показываем заглушкой, чтобы было видно,
+   что багажник будет наполняться. */
+const BAG = [
+  { id:'crew', ic:'👷', name:'Подрядчик',
+    have: () => S.crew|0,
+    sub:  () => 'закрывает заказ, которого нечем сдать',
+    desc: () => {
+      const cp = crewPrice(), have = S.crew|0;
+      return 'Жми по заказу, который нечем закрыть — подрядчик сдаст его без вещи ' +
+        'на поле. Награда полная: монеты, опыт, алмазы и посылка.<br><br>' +
+        'Следующий заказ стоит <b style="color:var(--gold)">' + cp + ' 👷</b>' +
+        (have >= cp ? ', у тебя хватает.' : ', не хватает ' + (cp - have) + '.') +
+        ' Сегодня закрыто: ' + (S.crewUsed|0) + '.<br>' +
+        'Цена растёт за день: ' + C.CREW_COST.join(' · ') + '. В полночь снова с ' +
+        C.CREW_COST[0] + '.<br><br>' +
+        'Падает из Сейфов Мажора — ' + Math.round(C.VAULT_CREW_CHANCE*100) + '% сейфов, ' +
+        C.VAULT_CREW.join('/') + ' штук по редкости.';
+    } },
+  { id:'battery', ic:'🔋', name:'Аккумулятор',
+    have: () => S.battery|0,
+    act:  'usebat',            // предмет применяют вручную — в окне появится кнопка
+    sub:  () => 'доливает бак',
+    desc: () => 'Доливает <b style="color:var(--gold)">+' + C.BATTERY_ENERGY + ' ⚡</b> и тратится. ' +
+      'Плещется даже сверх максимума, так что копить его до пустого бака необязательно.<br><br>' +
+      'Сейчас в баке ' + Math.floor(S.energy) + ' из ' + energyMax() + '.' },
+];
+const bagItem = id => BAG.find(x => x.id === id) || null;
+/* Аккумулятор доливает бак и тратится. Льём даже сверх максимума —
+   так же, как это делают канистры: иначе полный бак съедал бы предмет впустую. */
+function useBattery(){
+  if((S.battery|0) <= 0){ toast('Аккумуляторов нет'); SFX.err(); haptic('err'); return; }
+  S.battery--;
+  if(S.energy >= energyMax()) S.enTs = Date.now();
+  S.energy += C.BATTERY_ENERGY;
+  closeSheet();
+  toast('Аккумулятор: +' + C.BATTERY_ENERGY + ' ⚡');
+  SFX.gem(); haptic('ok');
+  renderAll(); save();
+}
+function bagSheet(id){
+  const it = bagItem(id);
+  if(!it){
+    openSheet('<div class="bigem">❓</div><h3 class="sh-h">Свободное место</h3>' +
+      '<p class="sh-p">Сюда лягут другие находки. Багажник рассчитан на ' + C.BAG_SLOTS +
+      ' предметов — пока занят один.</p>' +
+      '<div class="sh-row"><button class="btn gr" data-act="close">Ясно</button></div>');
+    return;
+  }
+  const n = it.have();
+  // Предмет, который применяют вручную, получает вторую кнопку
+  const use = it.act && n > 0
+    ? '<button class="btn gold" data-act="' + it.act + '">Применить · +' +
+      C.BATTERY_ENERGY + ' ⚡</button>' : '';
+  openSheet('<div class="bigem">' + it.ic + '</div>' +
+    '<h3 class="sh-h">' + it.name + '<span class="pill g">' + n + '</span></h3>' +
+    '<p class="sh-p" style="text-align:left">' + it.desc() + '</p>' +
+    '<div class="sh-row"><button class="btn' + (use ? '' : ' gr') + '" data-act="close">Закрыть</button>' +
+    use + '</div>');
+}
+
+/* ---------- ПОДРЯДЧИК ----------
+   Закрывает заказ, которого нечем закрыть: вещь на поле не нужна.
+   Цена в подрядчиках растёт за каждый закрытый сегодня заказ и обнуляется
+   в полночь. Без этого накопленная пачка сносила бы прогресс за один заход. */
+function crewSync(){
+  const d = dayKey();
+  if(S.crewDay !== d){ S.crewDay = d; S.crewUsed = 0; }
+}
+function crewPrice(){
+  crewSync();
+  return C.CREW_COST[Math.min(S.crewUsed|0, C.CREW_COST.length - 1)];
+}
+function crewNext(){
+  crewSync();
+  return C.CREW_COST[Math.min((S.crewUsed|0) + 1, C.CREW_COST.length - 1)];
+}
+const crewCan = () => (S.crew|0) >= crewPrice();
+
+/* Что предложить, когда нужной вещи на поле нет. Подрядчик закрывает заказ
+   целиком, поэтому идёт первым; если его не хватает — старое предложение
+   докупить недостающую вещь за алмазы. */
+function orderHelp(i){
+  const o = S.orders[i]; if(!o) return;
+  const need = crewPrice(), have = S.crew|0;
+  if(have < need){ offerRescue(i); return; }
+  openSheet('<div class="bigem">👷</div>' +
+    '<h3 class="sh-h">Отправить подрядчика?</h3>' +
+    '<p class="sh-p">Закроет заказ без вещи на поле: <b style="color:var(--gold)">' +
+      fmt(o.coins) + ' 🪙</b> и ' + o.xp + ' XP' +
+      (o.gems ? ', ' + o.gems + ' 💎' : '') + (o.chest ? ', посылка' : '') + '.<br>' +
+      'Стоит <b>' + need + ' 👷</b>, в багажнике ' + have + '.<br>' +
+      'Следующий сегодня — ' + crewNext() + ' 👷. В полночь цена снова с ' + C.CREW_COST[0] + '.</p>' +
+    '<div class="sh-row"><button class="btn" data-act="close">Сам домержу</button>' +
+    '<button class="btn gold" data-act="crew" data-i="' + i + '">' + need + ' 👷</button></div>');
+}
+function crewSend(i){
+  const o = S.orders[i]; if(!o) return;
+  const need = crewPrice();
+  if((S.crew|0) < need){ toast('Подрядчиков не хватает'); SFX.err(); haptic('err'); return; }
+  S.crew -= need; S.crewUsed = (S.crewUsed|0) + 1;
+  closeSheet();
+  payOrder(i, true);
+}
+
 function completeOrder(i){
   const o = S.orders[i];
   if(!o) return;
-  if(!boardHas(o.l)){ offerRescue(i); return; }
+  if(!boardHas(o.l)){ orderHelp(i); return; }
   removeOne(o.l);
+  payOrder(i, false);
+}
+/* Выдача награды за заказ. Вынесено отдельно, потому что подрядчик приходит
+   сюда же, только без снятия вещи с поля. */
+function payOrder(i, viaCrew){
+  const o = S.orders[i];
+  if(!o) return;
   /* Потолок кошелька растёт от самого жирного заказа. Поднимаем его ДО начисления,
      иначе монеты за этот же заказ упёрлись бы в старую планку. */
   const wasCap = coinCap();
@@ -1981,7 +2173,7 @@ function completeOrder(i){
   const nowCap = coinCap();
   gainCoins(o.coins); S.xp += o.xp;
   quest('coins', o.coins);
-  let msg = '+' + fmt(o.coins) + ' 🪙  +' + o.xp + ' XP';
+  let msg = (viaCrew ? '👷 ' : '') + '+' + fmt(o.coins) + ' 🪙  +' + o.xp + ' XP';
   if(o.chest){ S.pendingChests++; msg += '  +📦'; }
   if(o.gems){ earnGems(o.gems); msg += '  +' + o.gems + ' 💎'; }
   toast(msg); SFX.order(); haptic('ok');
@@ -2194,9 +2386,23 @@ function vipPrice(i,t,cyc){
   return Math.round(lo * cyclePriceMult(cyc || S.cycle) * Math.pow(hi/lo, i/(C.VIP_COUNT-1)));
 }
 const vipPts = (i,t,cyc) => C.VIP_PTS_STEP * (i+1) * C.VIP_TIER_PTS[t] * cyclePtsMult(cyc || S.cycle);
+/* Вехи витрины, которые что-то открывают. Добавляется одной строкой:
+   индекс предмета → значок и подпись под ним. */
+const VIP_UNLOCK = {
+  [C.VAULT_UNLOCK_VIP]:   { pill:'🔐 сейфы',        text:'Начинают падать Сейфы Мажора' },
+  [C.BATTERY_UNLOCK_VIP]: { pill:'🔋 аккумуляторы', text:'Начинают падать Аккумуляторы' },
+};
 const vipOwned = (i,t) => S.vip[t].indexOf(i) >= 0;
 const vipDone  = t => S.vip[t].length >= C.VIP_COUNT;
 const tierOpen = t => t === 0 || vipDone(t-1);
+/* Предметы витрины берутся строго по порядку: следующий — первый невыкупленный.
+   Ищем перебором, а не по длине списка: в старых сейвах предметы могли быть
+   куплены вразнобой, и там в цепочке остались дыры. */
+function vipNext(t){
+  for(let i=0;i<C.VIP_COUNT;i++) if(!vipOwned(i,t)) return i;
+  return C.VIP_COUNT;
+}
+const vipCanBuy = (i,t) => tierOpen(t) && !vipOwned(i,t) && i === vipNext(t);
 const cyclePtsTotal = cyc => C.VIP_PTS_STEP * (C.VIP_COUNT*(C.VIP_COUNT+1)/2) *
   C.VIP_TIER_PTS.reduce((a,b)=>a+b,0) * cyclePtsMult(cyc);
 function leagueMax(){
@@ -2211,11 +2417,16 @@ function vipBonus(){
 }
 function vipBuy(i,t){
   if(!tierOpen(t) || vipOwned(i,t)) return;
+  if(i !== vipNext(t)){ toast('Сначала возьми предыдущий'); SFX.err(); haptic('err'); return; }
   const p = vipPrice(i,t);
   if(S.coins < p){ toast('Не хватает ' + fmt(p - S.coins) + ' 🪙'); SFX.err(); haptic('err'); return; }
   S.coins -= p;
   const wasMin = genMin();
   S.vip[t].push(i);
+  const vaultJustOn = !S.vaultOn && i === C.VAULT_UNLOCK_VIP;
+  if(vaultJustOn) S.vaultOn = 1;
+  const batJustOn = !S.batOn && i === C.BATTERY_UNLOCK_VIP;
+  if(batJustOn) S.batOn = 1;
   /* Каждый выкупленный предмет: алмазы, плюс к баку и шаг к росту сброса.
      Бак и сброс считаются от числа выкупленного, отдельных полей не заводим. */
   earnGems(C.VIP_GEMS);
@@ -2230,6 +2441,24 @@ function vipBuy(i,t){
       '<p class="sh-p">Теперь он сбрасывает не ниже, чем <b style="color:var(' + RAR_VAR[rarOf(nowMin)] + ')">' +
         nameOf(nowMin) + '</b> вместо ' + nameOf(wasMin) + '. Выкуплено предметов витрин: ' + vipCount() + '.</p>' +
       '<div class="sh-row"><button class="btn gr" data-act="close">Отлично</button></div>');
+  }
+  if(vaultJustOn){
+    SFX.level(); haptic('ok');
+    setTimeout(()=>openSheet('<div class="bigem">🔐</div>' +
+      '<h3 class="sh-h">Пошли Сейфы Мажора</h3>' +
+      '<p class="sh-p">С этого дня вместо обычной вещи на поле изредка падает сейф — ' +
+      'шанс ' + (C.VAULT_CHANCE.reduce((a,b)=>a+b,0)*100).toFixed(1) + '%. ' +
+      'Он не сливается, его вскрывают тапом.<br>Внутри прибавка к максимуму монет, ' +
+      'алмазы, магниты или подрядчики — чем реже сейф, тем жирнее.</p>' +
+      '<div class="sh-row"><button class="btn gold" data-act="close">Понял</button></div>'), 340);
+  }
+  if(batJustOn){
+    SFX.level(); haptic('ok');
+    setTimeout(()=>openSheet('<div class="bigem">🔋</div>' +
+      '<h3 class="sh-h">Пошли Аккумуляторы</h3>' +
+      '<p class="sh-p">Теперь они изредка попадаются прямо с тапа по банкомату и ложатся ' +
+      'в багажник. Каждый доливает <b style="color:var(--gold)">+' + C.BATTERY_ENERGY + ' ⚡</b>.</p>' +
+      '<div class="sh-row"><button class="btn gold" data-act="close">Понял</button></div>'), 340);
   }
   if(vipDone(t) && t < 2){
     SFX.level();
@@ -2344,7 +2573,7 @@ function chestReward(rar){
 }
 function applyReward(rw){
   if(rw.kind === 'coins') gainCoins(rw.n);
-  if(rw.kind === 'gems')  S.gems  += rw.n;
+  if(rw.kind === 'gems')  earnGems(rw.n);
   if(rw.kind === 'boost') S.drop2Until = Math.max(S.drop2Until, Date.now()) + C.BOOST_DROP2_MIN*60000;
   if(rw.kind === 'item'){
     if(countFree() <= 0){ rw.sold = price(rw.l); gainCoins(rw.sold); }
@@ -2511,6 +2740,11 @@ function offerEnergy(){
     '<p class="sh-p">Энергия на нуле. Само накапает по ' + regenPerMin() + ' в минуту, до полного бака ' +
       mmss((energyMax()-S.energy)*regenSec()*1000) + '. Канистра доливает ' + (C.ENERGY_CAN_PCT*100) +
       '% бака, сейчас это ' + canEnergy() + ' ⚡. Или не ждём.</p>' +
+    // Аккумулятор бесплатный, поэтому предлагаем его первым и отдельной строкой
+    ((S.battery|0) > 0
+      ? '<div class="sh-row"><button class="btn gold" data-act="usebat" style="flex:1">🔋 Аккумулятор · +' +
+        C.BATTERY_ENERGY + ' ⚡ · в багажнике ' + (S.battery|0) + '</button></div>'
+      : '') +
     '<div class="sh-row"><button class="btn" data-act="close">Подожду</button>' +
     '<button class="btn pri" data-act="gbuy" data-id="energy_30">+' + canEnergy() + ' ⚡ · ' + goodPrice('energy_30') + ' 💎</button></div>' +
     '<div class="sh-row"><button class="btn pri" data-act="gbuy" data-id="energy_full" style="flex:1">Под пробку · +' +
@@ -2568,6 +2802,10 @@ function openVault(i){
   } else if(lo.kind === 'gems'){
     earnGems(lo.n);
     line = '<b style="color:var(--gem)">+' + lo.n + ' 💎</b>';
+  } else if(lo.kind === 'crew'){
+    S.crew = (S.crew|0) + lo.n;
+    line = '<b style="color:var(--gold)">+' + lo.n + ' 👷 в багажник</b><br>' +
+           'Подрядчиков всего: ' + S.crew + '. Закроют заказ без вещи на поле.';
   } else {
     S.magnets = (S.magnets|0) + lo.n;
     line = '<b style="color:var(--purple)">+' + lo.n + ' 🧲</b><br>Всего магнитов: ' + S.magnets;
@@ -2901,8 +3139,12 @@ function renderOrders(){
       h += '<div class="order empty">' + (left > 0 ? mmss(left) : '…') + '</div>';
       continue;
     }
-    h += '<button class="order' + (boardHas(o.l) ? ' ready' : '') + '" data-o="' + s + '">' +
-      '<span class="lvbadge">' + o.l + '</span><span class="em" style="--lc:' + lvlHue(o.l) + '">' + emo(o.l) + '</span>' +
+    // на заказе, который нечем сдать, показываем 👷, если подрядчиков хватает
+    const byCrew = !boardHas(o.l) && crewCan();
+    h += '<button class="order' + (boardHas(o.l) ? ' ready' : (byCrew ? ' crew' : '')) + '" data-o="' + s + '">' +
+      '<span class="lvbadge">' + o.l + '</span>' +
+      (byCrew ? '<span class="crewb">👷</span>' : '') +
+      '<span class="em" style="--lc:' + lvlHue(o.l) + '">' + emo(o.l) + '</span>' +
       '<span class="nm">' + nameOf(o.l) + '</span>' +
       '<span class="rw">' + fmt(o.coins) + '🪙' + (o.gems ? ' ' + o.gems + '💎' : '') + (o.chest ? ' 📦' : '') + '</span></button>';
   }
@@ -2987,6 +3229,25 @@ function renderShop(){
 }
 function renderChests(){
   let h = '';
+  /* Багажник — сетка на BAG_SLOTS мест. Показываем всегда, даже пустым:
+     иначе про подрядчика узнают только те, кому он уже выпал. */
+  crewSync();
+  h += '<h2 class="sec" style="margin-top:0">Багажник</h2>';
+  h += '<div class="bag">';
+  for(let k=0;k<C.BAG_SLOTS;k++){
+    const it = BAG[k];
+    if(!it){
+      h += '<button class="bagc empty" data-act="bag"><span class="bi">?</span></button>';
+      continue;
+    }
+    const n = it.have();
+    h += '<button class="bagc' + (n ? '' : ' zero') + '" data-act="bag" data-id="' + it.id + '">' +
+      '<span class="bi">' + it.ic + '</span>' +
+      '<span class="bn">' + n + '</span></button>';
+  }
+  h += '</div>';
+
+  h += '<h2 class="sec">Посылки</h2>';
   h += '<div class="pitybox">' +
     '<div class="pt"><span>До жирного улова</span><span>' + S.pity + ' / ' + C.PITY_PULLS + '</span></div>' +
     '<div class="track"><div class="fill xp" style="width:' + (S.pity/C.PITY_PULLS*100) + '%"></div></div>' +
@@ -3180,23 +3441,42 @@ function renderVip(){
     $('#vipBody').innerHTML = h;
     return;
   }
-  h += '<div class="note" style="margin:0 0 10px">Каждый предмет покупается один раз и даёт очки в лигу, ' +
+  if(t === 0){
+    const soon = [];
+    if(!S.vaultOn) soon.push(['🔐', C.VAULT_UNLOCK_VIP, 'Сейфы Мажора']);
+    if(!S.batOn)   soon.push(['🔋', C.BATTERY_UNLOCK_VIP, 'Аккумуляторы']);
+    for(const [ic, idx, what] of soon)
+      h += '<div class="note" style="margin:0 0 8px">' + ic + ' <b>' + nameOf(vipLvl(idx)) +
+        '</b> — предмет №' + (idx + 1) + ' — открывает <b>' + what + '</b>. ' +
+        'До него они не падают. Осталось выкупить: ' +
+        Math.max(0, idx - vipNext(0) + 1) + '.</div>';
+  }
+  h += '<div class="note" style="margin:0 0 10px">Предметы берутся <b>строго по порядку</b>: ' +
+    'следующий откроется, когда куплен предыдущий. ' +
+    'Каждый покупается один раз и даёт очки в лигу, ' +
     '<b>+' + C.VIP_GEMS + ' 💎</b> и <b>+' + C.VIP_ENERGY + ' ⚡ к баку навсегда</b>. Каждые ' +
     C.VIP_STEP_GEN + ' выкупленных предметов поднимают сброс банкомата — сейчас выкуплено ' + vipCount() + '. ' +
     'Когда все три витрины выкуплены, начинается круг ' + roman(S.cycle+1) + ': <b>предметы витрин обнуляются</b> ' +
     'и открываются заново по ценам выше в ' + fmt(C.CYCLE_PRICE_MULT) + ' раз. ' +
     'Очки при этом не сгорают — они уходят в банк навсегда, сейчас там ' + fmt(S.ptsBank) + ' очков.</div>';
+  const next = vipNext(t);
   for(let i=0;i<C.VIP_COUNT;i++){
     const l = vipLvl(i), p = vipPrice(i,t), have = vipOwned(i,t);
-    h += '<div class="vip ' + (t?'t'+t:'') + (have?' owned':'') + '">' +
+    const turn = i === next;                       // сейчас доступен только он
+    const un = VIP_UNLOCK[i];                      // эта веха что-то открывает
+    h += '<div class="vip ' + (t?'t'+t:'') + (have?' owned':'') + (!have && !turn ? ' locked' : '') + '">' +
       '<span class="vipnum">' + (i+1) + '</span>' +
-      '<div class="vi">' + emo(l) + '</div>' +
-      '<div class="vb"><div class="vt">' + nameOf(l) + (have ? ' ✓' : '') + '</div>' +
+      '<div class="vi">' + (have || turn ? emo(l) : '🔒') + '</div>' +
+      '<div class="vb"><div class="vt">' + nameOf(l) + (have ? ' ✓' : '') +
+        (un ? '<span class="pill v">' + un.pill + '</span>' : '') + '</div>' +
       '<div class="vd">ур. ' + l + ' · +' + vipPts(i,t) + ' очков<br>' +
-        '<span class="rw">+' + C.VIP_GEMS + ' 💎 · +' + C.VIP_ENERGY + ' ⚡ к баку</span></div></div>' +
+        '<span class="rw">+' + C.VIP_GEMS + ' 💎 · +' + C.VIP_ENERGY + ' ⚡ к баку</span>' +
+        (un ? '<br><span class="vlock">' + un.text + '</span>' : '') + '</div></div>' +
       (have ? '<button class="buy" disabled>куплено</button>'
-            : '<button class="buy coins" data-act="vipbuy" data-i="' + i + '" data-t="' + t + '"' +
-              (S.coins < p ? ' disabled' : '') + '>' + fmt(p) + ' 🪙</button>') +
+            : turn
+              ? '<button class="buy coins" data-act="vipbuy" data-i="' + i + '" data-t="' + t + '"' +
+                (S.coins < p ? ' disabled' : '') + '>' + fmt(p) + ' 🪙</button>'
+              : '<button class="buy" disabled>' + fmt(p) + ' 🪙</button>') +
       '</div>';
   }
   $('#vipBody').innerHTML = h;
@@ -3210,8 +3490,9 @@ function renderTiers(){
     const open = tierOpen(t);
     btn.disabled = !open;
     // Красная точка — когда монет хватает хотя бы на один невыкупленный предмет
+    // теперь доступен ровно один предмет — по нему и решаем
     let can = false;
-    if(open) for(let i=0;i<C.VIP_COUNT;i++) if(!vipOwned(i,t) && S.coins >= vipPrice(i,t)){ can = true; break; }
+    if(open){ const n = vipNext(t); can = n < C.VIP_COUNT && S.coins >= vipPrice(n,t); }
     btn.classList.toggle('alert', can);
     let lock = btn.querySelector('.lock');
     if(!open && !lock){ lock = document.createElement('span'); lock.className = 'lock'; lock.textContent = '🔒'; btn.appendChild(lock); }
@@ -3287,9 +3568,13 @@ function helpSheet(){
       C.VIP_GEMS + ' 💎</b> и <b>+' + C.VIP_ENERGY + ' ⚡</b> к баку навсегда. Каждые ' + C.VIP_STEP_GEN +
       ' выкупленных предметов поднимают минимальный сброс банкомата на уровень — как задания. ' +
       'Сейчас выкуплено: ' + vipCount() + '.') +
-    legalRow('🔐','<b>Сейф Мажора</b> иногда падает вместо обычной вещи — шанс ' +
+    legalRow('🔐','<b>Сейф Мажора</b> начинает падать после того, как в витрине выкуплен <b>' +
+      nameOf(vipLvl(C.VAULT_UNLOCK_VIP)) + '</b> (предмет №' + (C.VAULT_UNLOCK_VIP + 1) + '). ' +
+      'Дальше он иногда приходит вместо обычной вещи — шанс ' +
       (C.VAULT_CHANCE.reduce((a,b)=>a+b,0)*100).toFixed(1) + '%. Он не сливается, его вскрывают тапом. ' +
-      'Внутри одно из трёх: прибавка к максимуму монет, алмазы или магниты — чем реже сейф, тем жирнее. ' +
+      (S.vaultOn ? '' : 'У тебя ещё не открыт. ') +
+      'Внутри прибавка к максимуму монет или алмазы, и лишь в ' +
+      Math.round(C.VAULT_MAGNET_CHANCE*100) + '% случаев магниты — чем реже сейф, тем жирнее. ' +
       'Мифический даёт +' + Math.round(C.VAULT_CAP_PCT[4]*100) + '% к максимуму, ' + C.VAULT_GEMS[4] +
       ' 💎 или ' + C.VAULT_MAGNETS[4] + ' 🧲.') +
     legalRow('🏦','У кошелька есть потолок: <b>' + fmt(coinCap()) + ' 🪙</b>. Он равен ' + C.COIN_CAP_MULT +
@@ -3482,6 +3767,9 @@ document.addEventListener('click', e=>{
     case 'bizcopy':  bizCopy(); return;
     case 'bizclaim': bizClaim(b.dataset.id); return;
     case 'bizrank':  bizClaimRank(); return;
+    case 'crew':     crewSend(+b.dataset.i); return;
+    case 'bag':      bagSheet(b.dataset.id || ''); return;
+    case 'usebat':   useBattery(); return;
     case 'pack': PAY.buy(b.dataset.id); return;
     case 'gbuy': { const id = b.dataset.id; if(inSheet) $('#veil').classList.remove('on'); gemBuy(id); return; }
     case 'sell': {
