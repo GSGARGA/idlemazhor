@@ -128,6 +128,10 @@ main{flex:1;min-height:0;position:relative}
   animation:vaultp 1.8s ease-in-out infinite}
 @keyframes vaultp{0%,100%{box-shadow:0 3px 0 rgba(0,0,0,.4), 0 0 14px -6px var(--rc)}
   50%{box-shadow:0 3px 0 rgba(0,0,0,.4), 0 0 22px -2px var(--rc)}}
+/* Аккумулятор: кислотно-салатовый — такого нет ни у одной редкости,
+   чтобы не путался с обычным предметом обычной редкости */
+.item.vault.bat{--rc:#C4FF3D;background:linear-gradient(180deg,#25330A,#121A04)}
+.item.vault.bat .lv{color:#C4FF3D}
 .item .lv{position:absolute;bottom:0;right:4px;font-size:calc(var(--cell,60px) * .2);font-weight:800;
   color:var(--rc,var(--r1));font-family:var(--disp)}
 /* Подсветка под значком. Оттенок свой на каждый уровень (--lc ставит renderBoard),
@@ -1146,6 +1150,7 @@ function migrate(raw){
     // v26 → v27: в клетке может лежать сейф — у него своя редкость и нет зарядов
     const vault = (it.vault != null && it.vault >= 0 && it.vault < 5) ? (it.vault|0) : null;
     if(vault != null) return { l, ch:null, sp:null, vault };
+    if(it.bat) return { l, ch:null, sp:null, bat:1 };
     let sp = it.sp;
     if(sp == null && it.ch != null) sp = oldSpecialIdx(l);
     if(sp != null && !SPECIALS[sp]) sp = null;
@@ -1442,6 +1447,9 @@ function chargeBonus(l){
 /* Сейфы Мажора отпираются Самолётом — предметом витрины №20.
    До него их не существует: иначе новичок получал бы прибавку к максимуму
    монет раньше, чем узнаёт, что такое максимум. */
+/* Аккумулятор падает на поле вместо обычной вещи — как сейф. Собирается тапом.
+   Отпирается «Цехом», предметом витрины №30. */
+function rollBattery(){ return !!S.batOn && Math.random() < C.BATTERY_TAP_CHANCE; }
 function rollVault(){
   if(!S.vaultOn) return null;
   const r = Math.random();
@@ -1893,8 +1901,9 @@ function spawn(l, at){
   const i = (at != null && !S.board[at]) ? at : firstEmpty();
   if(i < 0){ toast('Класть некуда'); return -1; }
   const vr = rollVault();
-  S.board[i] = vr == null ? Object.assign({ l }, rollSpecial(l))
-                          : { l, ch:null, sp:null, vault:vr };
+  S.board[i] = vr != null ? { l, ch:null, sp:null, vault:vr }
+             : rollBattery() ? { l, ch:null, sp:null, bat:1 }
+             : Object.assign({ l }, rollSpecial(l));
   checkFull();
   if(l > S.seen) S.seen = l;
   return i;
@@ -1921,11 +1930,6 @@ function genTap(){
     const i = spawn(genRoll());
     if(i >= 0) popCell(i);
   }
-  // Аккумулятор изредка приходит прямо с тапа — но только после «Цеха»
-  if(S.batOn && Math.random() < C.BATTERY_TAP_CHANCE){
-    S.battery = (S.battery|0) + 1;
-    toast('🔋 Аккумулятор в багажник'); SFX.gem(); haptic('ok');
-  }
   SFX.tap(); haptic('light');
   quest('tap', 1);
   renderAll(); save();
@@ -1937,6 +1941,7 @@ function tryMerge(from,to,quiet){
   if(!a || !b || a.l !== b.l) return false;
   // Сейф — не предмет цепочки: его не сливают, а вскрывают тапом
   if(a.vault != null || b.vault != null) return false;
+  if(a.bat || b.bat) return false;
   if(a.l >= C.MAX_LVL){ if(!quiet) toast('Выше некуда'); return false; }   // упираемся только в технический потолок
   const nl = a.l + 1;
   S.board[from] = null;
@@ -2074,7 +2079,11 @@ const BAG = [
     sub:  () => 'доливает бак',
     desc: () => 'Доливает <b style="color:var(--gold)">+' + C.BATTERY_ENERGY + ' ⚡</b> и тратится. ' +
       'Плещется даже сверх максимума, так что копить его до пустого бака необязательно.<br><br>' +
-      'Сейчас в баке ' + Math.floor(S.energy) + ' из ' + energyMax() + '.' },
+      'Сейчас в баке ' + Math.floor(S.energy) + ' из ' + energyMax() + '.<br><br>' +
+      (S.batOn
+        ? 'Изредка падает на поле вместо обычной вещи — не сливается, забирается тапом.'
+        : 'Начнёт падать на поле, когда в витрине будет выкуплен <b>' +
+          nameOf(vipLvl(C.BATTERY_UNLOCK_VIP)) + '</b>.') },
 ];
 const bagItem = id => BAG.find(x => x.id === id) || null;
 /* Аккумулятор доливает бак и тратится. Льём даже сверх максимума —
@@ -2386,12 +2395,18 @@ function vipPrice(i,t,cyc){
   return Math.round(lo * cyclePriceMult(cyc || S.cycle) * Math.pow(hi/lo, i/(C.VIP_COUNT-1)));
 }
 const vipPts = (i,t,cyc) => C.VIP_PTS_STEP * (i+1) * C.VIP_TIER_PTS[t] * cyclePtsMult(cyc || S.cycle);
-/* Вехи витрины, которые что-то открывают. Добавляется одной строкой:
-   индекс предмета → значок и подпись под ним. */
+/* Вехи, которые что-то открывают. Ключ — НОМЕР ВИТРИНЫ, потом индекс предмета:
+   одна и та же двадцатая веха в Олигархе и в Престиже — разные вехи, и открытия
+   у них будут разные. Пустые витрины ждут своих находок. */
 const VIP_UNLOCK = {
-  [C.VAULT_UNLOCK_VIP]:   { pill:'🔐 сейфы',        text:'Начинают падать Сейфы Мажора' },
-  [C.BATTERY_UNLOCK_VIP]: { pill:'🔋 аккумуляторы', text:'Начинают падать Аккумуляторы' },
+  0: {   // Олигарх
+    [C.VAULT_UNLOCK_VIP]:   { pill:'🔐 сейфы',        text:'Начинают падать Сейфы Мажора' },
+    [C.BATTERY_UNLOCK_VIP]: { pill:'🔋 аккумуляторы', text:'Начинают падать Аккумуляторы' },
+  },
+  1: {},   // Престиж — свои открытия появятся здесь
+  2: {},   // Знаменитость — и здесь
 };
+const vipUnlock = (i,t) => (VIP_UNLOCK[t] || {})[i] || null;
 const vipOwned = (i,t) => S.vip[t].indexOf(i) >= 0;
 const vipDone  = t => S.vip[t].length >= C.VIP_COUNT;
 const tierOpen = t => t === 0 || vipDone(t-1);
@@ -2423,9 +2438,10 @@ function vipBuy(i,t){
   S.coins -= p;
   const wasMin = genMin();
   S.vip[t].push(i);
-  const vaultJustOn = !S.vaultOn && i === C.VAULT_UNLOCK_VIP;
+  // Отпирают только вехи Олигарха: в Престиже и Знаменитости будут свои
+  const vaultJustOn = !S.vaultOn && t === 0 && i === C.VAULT_UNLOCK_VIP;
   if(vaultJustOn) S.vaultOn = 1;
-  const batJustOn = !S.batOn && i === C.BATTERY_UNLOCK_VIP;
+  const batJustOn = !S.batOn && t === 0 && i === C.BATTERY_UNLOCK_VIP;
   if(batJustOn) S.batOn = 1;
   /* Каждый выкупленный предмет: алмазы, плюс к баку и шаг к росту сброса.
      Бак и сброс считаются от числа выкупленного, отдельных полей не заводим. */
@@ -2788,6 +2804,17 @@ function chestCoinLeft(){
   if(S.chestHour !== hourKey()) return C.CHEST_COIN_PER_HOUR;
   return Math.max(0, C.CHEST_COIN_PER_HOUR - (S.chestUsed|0));
 }
+/* Аккумулятор с поля — тапом в багажник. Окна не открываем: предмет
+   маленький и частый, лишнее окно только мешало бы мержить. */
+function takeBattery(i){
+  const it = S.board[i]; if(!it || !it.bat) return;
+  S.board[i] = null;
+  S.battery = (S.battery|0) + 1;
+  toast('🔋 Аккумулятор в багажник · всего ' + S.battery);
+  SFX.gem(); haptic('ok');
+  renderAll(); save();
+}
+
 /* Вскрытие сейфа: содержимое зависит от редкости, тип выбирается случайно. */
 function openVault(i){
   const it = S.board[i]; if(!it || it.vault == null) return;
@@ -3110,12 +3137,17 @@ function renderBoard(){
     if(!it){ if(cur) cell.innerHTML = ''; continue; }
     const rar = rarOf(it.l);
     const sig = it.l + ':' + (it.ch == null ? '-' : it.ch) + ':' + (it.sp == null ? '-' : it.sp)
-      + ':' + (it.vault == null ? '-' : 'v' + it.vault);
+      + ':' + (it.vault == null ? '-' : 'v' + it.vault) + ':' + (it.bat ? 'b' : '-');
     if(cur && cur.dataset && cur.dataset.sig === sig) continue;
     if(it.vault != null){
       cell.innerHTML = '<div class="item vault" data-sig="' + sig + '" style="--rc:var(' +
         RAR_VAR[it.vault] + ')"><span class="em">🔐</span>' +
         '<span class="lv">' + RARITY[it.vault][0] + '</span></div>';
+      continue;
+    }
+    if(it.bat){
+      cell.innerHTML = '<div class="item vault bat" data-sig="' + sig +
+        '"><span class="em">🔋</span><span class="lv">⚡</span></div>';
       continue;
     }
     const sp = specialOf(it), gx = galaxyOf(it.l);
@@ -3463,7 +3495,7 @@ function renderVip(){
   for(let i=0;i<C.VIP_COUNT;i++){
     const l = vipLvl(i), p = vipPrice(i,t), have = vipOwned(i,t);
     const turn = i === next;                       // сейчас доступен только он
-    const un = VIP_UNLOCK[i];                      // эта веха что-то открывает
+    const un = vipUnlock(i, t);                    // эта веха что-то открывает
     h += '<div class="vip ' + (t?'t'+t:'') + (have?' owned':'') + (!have && !turn ? ' locked' : '') + '">' +
       '<span class="vipnum">' + (i+1) + '</span>' +
       '<div class="vi">' + (have || turn ? emo(l) : '🔒') + '</div>' +
@@ -3708,6 +3740,7 @@ $('#board').addEventListener('pointercancel', ()=>{
 function tapCell(i){
   const it = S.board[i]; if(!it) return;
   if(it.vault != null){ openVault(i); return; }
+  if(it.bat){ takeBattery(i); return; }
   const sp = specialOf(it);
   if(sp && it.ch != null && it.ch > 0){
     if(sp.type === 'producer'){
