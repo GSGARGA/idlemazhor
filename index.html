@@ -491,6 +491,7 @@ const C = {
   PAY_SYNC_SEC:      20,     // через сколько секунд после покупки тихо сверить счёт с сервером, с
   PING_EVERY_SEC:    300,    // как часто отправлять на сервер накопленное время в игре, с
   PING_MIN_SEC:      20,     // меньше этого не отправляем — не гоняем сеть впустую, с
+  LIVE_IDLE_MIN:     5,      // ни одного касания столько минут — время в игре не считаем
   BOARD_COLS:        5,      // колонок на поле
   BOARD_ROWS:        5,      // рядов на поле
   ROWS_START:        5,      // открыто рядов на старте (всё поле сразу)
@@ -816,16 +817,25 @@ async function pullServer(){
 }
 
 /* ---------- СЧЁТЧИК ВРЕМЕНИ В ИГРЕ ----------
-   Считаем только секунды, когда игра реально на экране: свернул — счёт встал.
-   Копим у себя и отправляем пачкой раз в PING_EVERY_SEC, а также при уходе
-   со страницы. Так на сервере получается одна запись вместо сотни. */
-let liveSec = 0, liveTs = Date.now(), pingTs = Date.now();
+   Считаем только секунды, когда человек РЕАЛЬНО играет.
+   Одного visibilityState мало: Telegram на телефоне далеко не всегда
+   сообщает, что приложение свернули — вкладка остаётся «видимой», таймер
+   тикает, и у того, кто просто не закрыл окно, сессия росла часами.
+   Поэтому второе условие — было ли касание за последние LIVE_IDLE_MIN минут.
+   Когда касаний нет, счёт встаёт И пинги прекращаются: сервер видит паузу
+   и закрывает сессию сам. */
+let liveSec = 0, liveTs = Date.now(), pingTs = Date.now(), actTs = Date.now();
+// Любое касание экрана — признак, что человек за игрой, а не ушёл с открытым окном
+['pointerdown','keydown','touchstart','wheel'].forEach(ev=>
+  document.addEventListener(ev, ()=>{ actTs = Date.now(); }, {passive:true, capture:true}));
+const livePlaying = () => document.visibilityState === 'visible'
+  && Date.now() - actTs < C.LIVE_IDLE_MIN*60000;
 function tickLive(){
   const now = Date.now();
   const gap = (now - liveTs) / 1000;
   liveTs = now;
-  // пауза больше минуты — значит игра была свёрнута, это время не наше
-  if(document.visibilityState === 'visible' && gap > 0 && gap < 60) liveSec += gap;
+  if(!livePlaying()) return;
+  if(gap > 0 && gap < 60) liveSec += gap;
   if(now - pingTs > C.PING_EVERY_SEC*1000) sendPing(false);
 }
 /* Одним запросом отдаём и время, и всё про сообщество: уровень, очки лиги,
@@ -858,7 +868,8 @@ function sendPing(leaving, force){
   }catch(e){}
 }
 document.addEventListener('visibilitychange', ()=>{
-  if(document.visibilityState === 'visible') liveTs = Date.now();   // вернулись — считаем заново
+  // вернулись — считаем заново; сам возврат в игру уже считается действием
+  if(document.visibilityState === 'visible'){ liveTs = Date.now(); actTs = Date.now(); }
   else sendPing(true);                                              // свернули — отдаём накопленное
 });
 window.addEventListener('pagehide', ()=>sendPing(true));
@@ -938,6 +949,10 @@ if(tg){ try{
      });
     // после выхода в полный экран замок можно поставить заново
     try{ tg.onEvent('fullscreenChanged', lockPortrait); }catch(e){}
+    /* Bot API 8.0 умеет прямо сказать, что приложение свернули или развернули.
+       Где умеет — сессия закрывается сразу, не дожидаясь тишины в 5 минут. */
+    try{ tg.onEvent('activated',   ()=>{ liveTs = Date.now(); actTs = Date.now(); }); }catch(e){}
+    try{ tg.onEvent('deactivated', ()=>{ sendPing(true); actTs = 0; }); }catch(e){}
   }
 }catch(e){} }
 applyInsets();
