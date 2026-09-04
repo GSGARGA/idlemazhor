@@ -768,6 +768,8 @@ const C = {
   // Ограниченные предложения: приходят по таймеру и на каждый 5-й уровень,
   // висят в магазине не дольше своего срока, больше трёх сразу не бывает
   OFFER_EVERY_MIN:     10,   // минут между появлениями
+  OFFER_AFTER_BUY_MIN: 30,   // после покупки следующее не раньше, чем через столько
+  OFFER_RETRY_MIN:     1,    // не нашлось подходящего — пробуем снова через минуту
   OFFER_ON_LEVEL_EVERY: 5,   // каждый N-й уровень игрока тоже приносит предложение
   OFFER_MAX:           3,    // сколько предложений висит одновременно
 
@@ -1153,6 +1155,9 @@ let S = fresh();
    v5 и раньше: девять цепочек по 12 уровней. Теперь одна на 100.
    Старые предметы переводим по правилу «цепочка × 12 + уровень», чтобы
    прогресс не обнулился, и режем по потолку. */
+/* Безопасная метка времени из сейва: отрицательное, дробное и мусор — в ноль.
+   Именно здесь нельзя пользоваться `|0`, см. пояснение ниже. */
+function ts(v){ const n = Math.round(Number(v)); return Number.isFinite(n) && n > 0 ? n : 0; }
 function migrate(raw){
   if(!raw || typeof raw !== 'object') return fresh();
   let s = raw;
@@ -1213,7 +1218,15 @@ function migrate(raw){
   delete s.dblLeft;                             // v13 → v14: «Ксерокс» убран из игры
   s.galaxySeen = Math.max(1, s.galaxySeen|0 || 1);   // v14 → v15: витки цепочки
   if(!Array.isArray(s.offers)) s.offers = [];        // v16 → v17: живые предложения
-  s.offerNextAt = s.offerNextAt|0;
+  /* ВАЖНО: метку времени нельзя чистить через `|0` — это 32-битная операция,
+     и 1 788 521 256 075 превращается в 1 814 860 939, то есть в январь 1970-го.
+     Из-за этого каждый перезаход обнулял очередь предложений, и следующее
+     приходило сразу после запуска. */
+  s.offerNextAt = ts(s.offerNextAt);
+  // все прочие метки времени в сейве чистим тем же способом
+  for(const k of ['savedAt','enTs','orderCdUntil','drop2Until','mergeAllUntil','premiumUntil',
+                  'starterUntil','rescueCdUntil','payPending'])
+    s[k] = ts(s[k]);
   s.cycle = Math.max(1, s.cycle|0 || 1);        // v11 → v12: круги престижа
   s.ptsBank = Math.max(0, s.ptsBank|0);
   if(!Array.isArray(s.vip) || s.vip.length !== 3) s.vip = [[],[],[]];
@@ -2844,8 +2857,11 @@ function tickOffers(){
   S.offers = S.offers.filter(o=>o.until > Date.now());
   let changed = n !== S.offers.length;
   if(Date.now() >= (S.offerNextAt||0)){
-    S.offerNextAt = Date.now() + C.OFFER_EVERY_MIN*60000;
-    if(addOffer()) changed = true;
+    /* Таймер двигаем ТОЛЬКО когда предложение реально появилось. Раньше он
+       сдвигался в любом случае — и если места были заняты или подходящего
+       оффера не нашлось, очередь сгорала впустую. */
+    if(addOffer()){ S.offerNextAt = Date.now() + C.OFFER_EVERY_MIN*60000; changed = true; }
+    else S.offerNextAt = Date.now() + C.OFFER_RETRY_MIN*60000;
   }
   return changed;
 }
@@ -2864,6 +2880,9 @@ function offerBuy(i){
   if(g.prem){ S.premiumUntil = Math.max(S.premiumUntil, Date.now()) + g.prem*86400000; fillOrders(); }
   if(g.ch){ chests = g.ch; }
   S.offers.splice(i,1);
+  /* Покупка запускает откат. Без этого можно было взять предложение, выйти,
+     зайти — и следующее приходило сразу, потому что время «капало» и в фоне. */
+  S.offerNextAt = Date.now() + C.OFFER_AFTER_BUY_MIN*60000;
   SFX.coin(); haptic('ok');
   toast(tpl.t + ' — забрал');
   if(chests) openChests(chests); else { renderAll(); save(); }
@@ -3798,7 +3817,8 @@ function helpSheet(){
       ' уровней до +' + C.SPECIAL_CH_MAX + ', дальше плюс один за каждые ' + C.SPECIAL_CH_SLOW + '.') +
     legalRow('🎁','В магазине бывает раздел «Пока дают»: ограниченные наборы за алмазы. ' +
       'Новый приходит каждые ' + C.OFFER_EVERY_MIN + ' минут и на каждый ' + C.OFFER_ON_LEVEL_EVERY +
-      '-й уровень, больше ' + C.OFFER_MAX + ' сразу не висит. У каждого свой таймер — не успел, исчезает.') +
+      '-й уровень, больше ' + C.OFFER_MAX + ' сразу не висит. После покупки следующее — не раньше чем через ' +
+      C.OFFER_AFTER_BUY_MIN + ' минут. У каждого свой таймер — не успел, исчезает.') +
     legalRow('🌌','Слил две Корпорации №1 — цепочка идёт по новому витку: снова Цент, но 101 уровня. ' +
       'Названия повторяются, цена продолжает расти без сброса, опыт за слияние умножается на ' +
       C.GALAXY_XP_MULT + '. Виток отмечен римской цифрой на плитке.') +
@@ -4076,7 +4096,9 @@ function boot(){
   weeklyPayout();   // при смене недели выдаём приз за место прошлой недели
   S.rows = Math.max(S.rows, rowsMax());
   fillOrders();
-  if(!S.offerNextAt) S.offerNextAt = Date.now() + 60000;   // первое предложение через минуту
+  /* Первое предложение — не раньше, чем через минуту после запуска. Сдвигаем
+     и просроченный таймер: иначе перезаход выдавал предложение мгновенно. */
+  S.offerNextAt = Math.max(ts(S.offerNextAt), Date.now() + C.OFFER_RETRY_MIN*60000);
   buildBoard();
   S.tut = true;                  // первый запуск тоже начинается с пустого поля
   go('game');
