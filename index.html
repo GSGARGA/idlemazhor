@@ -541,8 +541,9 @@ const C = {
   LVL_REWARD_BONUS:  0.5,
   LVL_REWARD_CAP:    10,
   LVL_GEM_DIV:       2,      // во столько раз режем алмазы за уровень
-  LVL_GEM_LATE:      50,     // с этого уровня алмазов за уровень вдвое меньше
-  LVL_GEM_LATE_DIV:  2,      // во столько раз режем после него
+  /* Алмазы за уровень режем ступенями: [с какого уровня, сколько ОСТАЁТСЯ].
+     Доли перемножаются, поэтому 0.5 — это «вдвое меньше», 0.7 — «на 30% меньше». */
+  LVL_GEM_STEPS:     [[20, 0.5], [50, 0.5], [100, 0.7]],
 
   ENERGY_MAX:        100,    // стартовый максимум энергии
   ENERGY_GEMS_PER_100: 60,   // алмазов за 100 энергии в магазине
@@ -1492,15 +1493,16 @@ function tapCost(){ return C.ENERGY_TAP_COST + Math.floor(S.level / C.TAP_COST_S
 const rewardMult = l => Math.min(C.LVL_REWARD_CAP, 1 + C.LVL_REWARD_BONUS * Math.floor(l / C.LVL_REWARD_STEP));
 function levelReward(l){
   const m = rewardMult(l);
-  /* После LVL_GEM_LATE алмазы за уровень режем ещё вдвое: множитель награды
-     к этому моменту уже разогнался, и дальше выплаты росли слишком быстро. */
-  const d = C.LVL_GEM_DIV * (l > C.LVL_GEM_LATE ? C.LVL_GEM_LATE_DIV : 1);
-  if(l % 10 === 0){ const n = Math.max(1, Math.round((75 + l*2) * m / d));
+  /* Базовое урезание плюс все пройденные ступени: множитель награды разгоняется
+     с уровнем, и без этого выплаты росли бы слишком быстро. */
+  let k = 1 / C.LVL_GEM_DIV;
+  for(const [from, mul] of C.LVL_GEM_STEPS) if(l > from) k *= mul;
+  if(l % 10 === 0){ const n = Math.max(1, Math.round((75 + l*2) * m * k));
     return { kind:'gems', n, em:'💎', text:fmt(n) + ' алмазов' }; }
   if(l % 5 === 0){ const n = Math.round(2 * m);
     return { kind:'chest', n, em:'📦', text:n + (n === 1 ? ' посылка' : n < 5 ? ' посылки' : ' посылок') }; }
   if(l % 3 === 0) return { kind:'boost', em:'🤑', text:'Банкомат сошёл с ума' };
-  const n = Math.max(1, Math.round((10 + Math.floor(l/4)*5) * m / d));
+  const n = Math.max(1, Math.round((10 + Math.floor(l/4)*5) * m * k));
   return { kind:'gems', n, em:'💎', text:fmt(n) + ' алмазов' };
 }
 function giveLevelReward(l){
@@ -2400,18 +2402,22 @@ function vipPrice(i,t,cyc){
   return Math.round(lo * cyclePriceMult(cyc || S.cycle) * Math.pow(hi/lo, i/(C.VIP_COUNT-1)));
 }
 const vipPts = (i,t,cyc) => C.VIP_PTS_STEP * (i+1) * C.VIP_TIER_PTS[t] * cyclePtsMult(cyc || S.cycle);
-/* Вехи, которые что-то открывают. Ключ — НОМЕР ВИТРИНЫ, потом индекс предмета:
-   одна и та же двадцатая веха в Олигархе и в Престиже — разные вехи, и открытия
-   у них будут разные. Пустые витрины ждут своих находок. */
+/* Вехи, которые что-то открывают. Каждая веха в игре уникальна, поэтому ключ
+   тройной: КРУГ → ВИТРИНА → индекс предмета. Двадцатая веха Олигарха в круге I,
+   она же в круге II и та же по номеру в Престиже — это три разные вехи,
+   и открытия у них будут свои. Пустые ветки ждут своих находок. */
 const VIP_UNLOCK = {
-  0: {   // Олигарх
-    [C.VAULT_UNLOCK_VIP]:   { pill:'🔐 сейфы',        text:'Начинают падать Сейфы Мажора' },
-    [C.BATTERY_UNLOCK_VIP]: { pill:'🔋 аккумуляторы', text:'Начинают падать Аккумуляторы' },
+  1: {                                  // круг I
+    0: {                                // Олигарх I
+      [C.VAULT_UNLOCK_VIP]:   { pill:'🔐 сейфы',        text:'Начинают падать Сейфы Мажора' },
+      [C.BATTERY_UNLOCK_VIP]: { pill:'🔋 аккумуляторы', text:'Начинают падать Аккумуляторы' },
+    },
+    1: {},                              // Престиж I
+    2: {},                              // Знаменитость I
   },
-  1: {},   // Престиж — свои открытия появятся здесь
-  2: {},   // Знаменитость — и здесь
+  // круг II и дальше — добавляются сюда же, своими открытиями
 };
-const vipUnlock = (i,t) => (VIP_UNLOCK[t] || {})[i] || null;
+const vipUnlock = (i,t) => (((VIP_UNLOCK[S.cycle] || {})[t]) || {})[i] || null;
 const vipOwned = (i,t) => S.vip[t].indexOf(i) >= 0;
 const vipDone  = t => S.vip[t].length >= C.VIP_COUNT;
 const tierOpen = t => t === 0 || vipDone(t-1);
@@ -2443,10 +2449,11 @@ function vipBuy(i,t){
   S.coins -= p;
   const wasMin = genMin();
   S.vip[t].push(i);
-  // Отпирают только вехи Олигарха: в Престиже и Знаменитости будут свои
-  const vaultJustOn = !S.vaultOn && t === 0 && i === C.VAULT_UNLOCK_VIP;
+  // Отпирают только вехи Олигарха первого круга: у остальных будут свои
+  const un = vipUnlock(i, t);
+  const vaultJustOn = !!un && !S.vaultOn && i === C.VAULT_UNLOCK_VIP;
   if(vaultJustOn) S.vaultOn = 1;
-  const batJustOn = !S.batOn && t === 0 && i === C.BATTERY_UNLOCK_VIP;
+  const batJustOn = !!un && !S.batOn && i === C.BATTERY_UNLOCK_VIP;
   if(batJustOn) S.batOn = 1;
   /* Каждый выкупленный предмет: алмазы, плюс к баку и шаг к росту сброса.
      Бак и сброс считаются от числа выкупленного, отдельных полей не заводим. */
@@ -3486,10 +3493,12 @@ function renderVip(){
     $('#vipBody').innerHTML = h;
     return;
   }
-  if(t === 0){
+  {
     const soon = [];
-    if(!S.vaultOn) soon.push(['🔐', C.VAULT_UNLOCK_VIP, 'Сейфы Мажора']);
-    if(!S.batOn)   soon.push(['🔋', C.BATTERY_UNLOCK_VIP, 'Аккумуляторы']);
+    if(!S.vaultOn && vipUnlock(C.VAULT_UNLOCK_VIP, t))
+      soon.push(['🔐', C.VAULT_UNLOCK_VIP, 'Сейфы Мажора']);
+    if(!S.batOn && vipUnlock(C.BATTERY_UNLOCK_VIP, t))
+      soon.push(['🔋', C.BATTERY_UNLOCK_VIP, 'Аккумуляторы']);
     for(const [ic, idx, what] of soon)
       h += '<div class="note" style="margin:0 0 8px">' + ic + ' <b>' + nameOf(vipLvl(idx)) +
         '</b> — предмет №' + (idx + 1) + ' — открывает <b>' + what + '</b>. ' +
