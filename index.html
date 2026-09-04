@@ -128,6 +128,25 @@ main{flex:1;min-height:0;position:relative}
   animation:vaultp 1.8s ease-in-out infinite}
 @keyframes vaultp{0%,100%{box-shadow:0 3px 0 rgba(0,0,0,.4), 0 0 14px -6px var(--rc)}
   50%{box-shadow:0 3px 0 rgba(0,0,0,.4), 0 0 22px -2px var(--rc)}}
+/* Бандероль: собственная рамка на каждую редкость. Двойной контур и
+   бегущий блик — чтобы её было видно на поле за версту и чтобы редкость
+   читалась мгновенно, не вчитываясь в букву в углу. */
+.item.parcel{background:linear-gradient(180deg,#1B1408,#0C0904);
+  box-shadow:0 0 0 2px var(--rc), 0 3px 0 rgba(0,0,0,.45), 0 0 22px -4px var(--rc);
+  animation:parcelp 2.2s ease-in-out infinite;overflow:hidden}
+@keyframes parcelp{0%,100%{box-shadow:0 0 0 2px var(--rc), 0 3px 0 rgba(0,0,0,.45), 0 0 16px -6px var(--rc)}
+  50%{box-shadow:0 0 0 2px var(--rc), 0 3px 0 rgba(0,0,0,.45), 0 0 28px 0 var(--rc)}}
+.item.parcel::after{content:'';position:absolute;top:-40%;bottom:-40%;width:35%;left:-45%;
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,.45),transparent);
+  transform:rotate(18deg);animation:parcelsw 2.6s linear infinite}
+@keyframes parcelsw{0%{left:-45%}60%,100%{left:125%}}
+.item.parcel .lv{color:var(--rc);text-shadow:0 1px 2px rgba(0,0,0,.9)}
+/* чем реже, тем богаче подложка */
+.item.parcel.r1{background:linear-gradient(180deg,#0B1A2A,#050C15)}
+.item.parcel.r2{background:linear-gradient(180deg,#1A0F2A,#0C0715)}
+.item.parcel.r3{background:linear-gradient(180deg,#2A2008,#150F04)}
+.item.parcel.r4{background:linear-gradient(180deg,#2E0C10,#160508)}
+
 /* Аккумулятор: кислотно-салатовый — такого нет ни у одной редкости,
    чтобы не путался с обычным предметом обычной редкости */
 .item.vault.bat{--rc:#C4FF3D;background:linear-gradient(180deg,#25330A,#121A04)}
@@ -367,6 +386,9 @@ h2.sec:first-child{margin-top:0}
 .lootrow .li{font-size:20px;width:24px;text-align:center;flex:0 0 auto}
 .lootrow .lt{flex:1;min-width:0;font-size:12px;font-weight:800;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .lootrow .lr{font-size:9.5px;font-weight:800;color:var(--lc)}
+/* Награды бандероли длиннее обычных — им разрешён перенос на вторую строку */
+.loot.wrap .lootrow{align-items:flex-start;padding-top:8px;padding-bottom:8px}
+.loot.wrap .lootrow .lt{white-space:normal;text-overflow:clip;line-height:1.35}
 
 /* ---------- ЛИГА ---------- */
 .lgrow{display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:11px;
@@ -613,6 +635,25 @@ const C = {
      29 — это «Цех», тридцатый по счёту, уровень 60. До него их не бывает. */
   BATTERY_UNLOCK_VIP: 29,
   BATTERY_TAP_CHANCE: 0.005,  // шанс аккумулятора за тап по банкомату
+
+  /* ===== БАНДЕРОЛЬ ===== падает на поле, как сейф, и вскрывается тапом.
+     Отпирается «Корпорацией №1» — предметом витрины №50 (индекс 49). */
+  PARCEL_UNLOCK_VIP: 49,
+  PARCEL_CHANCE: [0.01, 0.005, 0.002, 0.001, 0.0005],  // шанс за тап по редкостям
+  PARCEL_PICKS:  4,     // сколько наград достаётся из бандероли за раз
+  /* Награды обычной бандероли. С каждой редкостью числа удваиваются.
+     k — что даём, n — сколько, t — как назвать. */
+  PARCEL_LOOT: [
+    { k:'bak',    n:2,   ic:'⚡', t:'к максимуму энергии' },
+    { k:'magnet', n:1,   ic:'🧲', t:'магнита' },
+    { k:'batt',   n:1,   ic:'🔋', t:'аккумулятора' },
+    { k:'gems',   n:10,  ic:'💎', t:'алмазов' },
+    { k:'chest',  n:5,   ic:'📦', t:'посылок' },
+    { k:'crew',   n:2,   ic:'👷', t:'подрядчика' },
+    { k:'pts',    n:100, ic:'🏆', t:'очков лиги' },
+    { k:'cap',    n:5,   ic:'🏦', t:'% к максимуму монет' },
+    { k:'coins',  n:100, ic:'🪙', t:'% от лучшего заказа' },
+  ],
   START_CREW:        1,      // подрядчиков на старте игры
   START_BATTERY:     3,      // и аккумуляторов
   ORDER_CHEST_CHANCE:0.20,   // шанс посылки в награду
@@ -1084,6 +1125,7 @@ function fresh(){
     crewDay:'', crewUsed:0,          // день и сколько заказов закрыто подрядчиками
     vaultOn:0,             // выкуплен Самолёт — сейфы начали падать. Круг престижа это не сбрасывает
     batOn:0,               // выкуплен Цех — аккумуляторы тоже пошли
+    parcelOn:0,            // выкуплена Корпорация №1 — пошли бандероли
     coinCd:{},                  // до какого времени пакеты монет на кулдауне
     galaxySeen:1,               // до какого витка цепочки уже показывали поздравление
     cycle:1,                    // круг престижа: 1, 2, 3, ... без потолка
@@ -1154,6 +1196,8 @@ function migrate(raw){
     const vault = (it.vault != null && it.vault >= 0 && it.vault < 5) ? (it.vault|0) : null;
     if(vault != null) return { l, ch:null, sp:null, vault };
     if(it.bat) return { l, ch:null, sp:null, bat:1 };
+    const parcel = (it.parcel != null && it.parcel >= 0 && it.parcel < 5) ? (it.parcel|0) : null;
+    if(parcel != null) return { l, ch:null, sp:null, parcel };
     let sp = it.sp;
     if(sp == null && it.ch != null) sp = oldSpecialIdx(l);
     if(sp != null && !SPECIALS[sp]) sp = null;
@@ -1212,6 +1256,9 @@ function migrate(raw){
   s.batOn = (s.batOn|0) ? 1
     : ((Array.isArray(s.vip) && Array.isArray(s.vip[0]) && s.vip[0].indexOf(C.BATTERY_UNLOCK_VIP) >= 0)
        || (s.vipEver|0) > C.BATTERY_UNLOCK_VIP ? 1 : 0);
+  s.parcelOn = (s.parcelOn|0) ? 1
+    : ((Array.isArray(s.vip) && Array.isArray(s.vip[0]) && s.vip[0].indexOf(C.PARCEL_UNLOCK_VIP) >= 0)
+       || (s.vipEver|0) > C.PARCEL_UNLOCK_VIP ? 1 : 0);
   if(!Array.isArray(s.orders)) s.orders = [];
   s.orders = s.orders.filter(o=>o && typeof o.l === 'number');
   s.v = C.SAVE_VERSION;
@@ -1453,6 +1500,70 @@ function chargeBonus(l){
 /* Аккумулятор падает на поле вместо обычной вещи — как сейф. Собирается тапом.
    Отпирается «Цехом», предметом витрины №30. */
 function rollBattery(){ return !!S.batOn && Math.random() < C.BATTERY_TAP_CHANCE; }
+/* Бандероль — самая редкая находка на поле. Как и сейф, не сливается
+   и вскрывается тапом. Бросаем от мифической к обычной, чтобы редкие
+   не съедались частыми. */
+function rollParcel(){
+  if(!S.parcelOn) return null;
+  const r = Math.random();
+  let acc = 0;
+  for(let i = C.PARCEL_CHANCE.length - 1; i >= 0; i--){
+    acc += C.PARCEL_CHANCE[i];
+    if(r < acc) return i;
+  }
+  return null;
+}
+/* Что внутри. Берём PARCEL_PICKS разных наград из списка, числа умножаем
+   на 2 в степени редкости: редкая вдвое жирнее обычной, эпическая вчетверо. */
+function parcelLoot(rar){
+  const pool = C.PARCEL_LOOT.slice(), out = [], mul = Math.pow(2, rar);
+  const take = Math.min(C.PARCEL_PICKS, pool.length);
+  for(let k=0;k<take;k++){
+    const j = (Math.random() * pool.length) | 0;
+    const g = pool.splice(j, 1)[0];
+    out.push({ k:g.k, t:g.t, ic:g.ic, n:Math.max(1, Math.round(g.n * mul)) });
+  }
+  return out;
+}
+/* Начисление одной награды. Возвращает строку для списка добычи. */
+function parcelGive(g){
+  switch(g.k){
+    case 'bak':    S.bakBonus = (S.bakBonus|0) + g.n;
+                   return '+' + g.n + ' к максимуму энергии · теперь ' + energyMax();
+    case 'magnet': S.magnets = (S.magnets|0) + g.n;
+                   return '+' + g.n + ' магнит' + (g.n === 1 ? '' : g.n < 5 ? 'а' : 'ов');
+    case 'batt':   S.battery = (S.battery|0) + g.n;
+                   return '+' + g.n + ' аккумулятор' + (g.n === 1 ? '' : g.n < 5 ? 'а' : 'ов');
+    case 'crew':   S.crew = (S.crew|0) + g.n;
+                   return '+' + g.n + ' подрядчик' + (g.n === 1 ? '' : g.n < 5 ? 'а' : 'ов');
+    case 'gems':   earnGems(g.n);                     return '+' + fmt(g.n) + ' алмазов';
+    case 'chest':  S.pendingChests = (S.pendingChests|0) + g.n;
+                   return '+' + g.n + ' посыл' + (g.n === 1 ? 'ка' : g.n < 5 ? 'ки' : 'ок');
+    case 'pts':    S.ptsBank = (S.ptsBank|0) + g.n;   return '+' + fmt(g.n) + ' очков лиги';
+    case 'cap':    S.capMul = Math.max(1, S.capMul||1) * (1 + g.n/100);
+                   return '+' + g.n + '% к максимуму монет · теперь ' + fmt(coinCap());
+    case 'coins': {
+      // доля от самого жирного сданного заказа: чем дальше игрок, тем весомее
+      const n = gainCoins(Math.round(Math.max(C.COIN_CAP_MIN/10, S.bestOrder||0) * g.n/100));
+      return '+' + fmt(n) + ' монет · ' + g.n + '% заказа';
+    }
+  }
+  return '';
+}
+function openParcel(i){
+  const it = S.board[i]; if(!it || it.parcel == null) return;
+  const rar = it.parcel, loot = parcelLoot(rar);
+  S.board[i] = null;
+  quest('parcel', 1);
+  const lines = loot.map(g=>'<div class="lootrow" style="--lc:var(' + RAR_VAR[rar] + ')">' +
+    '<span class="li">' + g.ic + '</span><span class="lt">' + parcelGive(g) + '</span></div>').join('');
+  SFX.chest(rar); haptic(rar >= 2 ? 'ok' : 'light');
+  openSheet('<div class="bigem">📮</div>' +
+    '<h3 class="sh-h" style="color:var(' + RAR_VAR[rar] + ')">Бандероль · ' + RARITY[rar] + '</h3>' +
+    '<div class="loot wrap">' + lines + '</div>' +
+    '<div class="sh-row"><button class="btn gold" data-act="close">Принять</button></div>');
+  renderAll(); save();
+}
 function rollVault(){
   if(!S.vaultOn) return null;
   const r = Math.random();
@@ -1907,8 +2018,9 @@ function spawn(l, at){
   l = clamp(l, 1, C.MAX_LVL);
   const i = (at != null && !S.board[at]) ? at : firstEmpty();
   if(i < 0){ toast('Класть некуда'); return -1; }
-  const vr = rollVault();
+  const vr = rollVault(), pr = vr == null ? rollParcel() : null;
   S.board[i] = vr != null ? { l, ch:null, sp:null, vault:vr }
+             : pr != null ? { l, ch:null, sp:null, parcel:pr }
              : rollBattery() ? { l, ch:null, sp:null, bat:1 }
              : Object.assign({ l }, rollSpecial(l));
   checkFull();
@@ -1949,6 +2061,7 @@ function tryMerge(from,to,quiet){
   // Сейф — не предмет цепочки: его не сливают, а вскрывают тапом
   if(a.vault != null || b.vault != null) return false;
   if(a.bat || b.bat) return false;
+  if(a.parcel != null || b.parcel != null) return false;
   if(a.l >= C.MAX_LVL){ if(!quiet) toast('Выше некуда'); return false; }   // упираемся только в технический потолок
   const nl = a.l + 1;
   S.board[from] = null;
@@ -2383,6 +2496,12 @@ function weeklyPayout(){
 /* ============ ВИТРИНЫ: ОЛИГАРХ / ПРЕСТИЖ / ЗНАМЕНИТОСТЬ ============
    Пятьдесят предметов в каждой, покупаются один раз за монеты.
    Каждый купленный навсегда добавляет очки в лигу. */
+/* Цвет названия витрины по кругу. Круг I — обычный, дальше по нарастающей:
+   зелёный, синий, фиолетовый, золотой, красный, а с седьмого — свои оттенки
+   на случай, если кто-то туда всё же доберётся. */
+const CYCLE_COLOR = ['var(--ink)','#4FC98A','#5AA9FF','#B47BFF','#FFCE3D','#FF6B5A',
+                     '#40E0D0','#FF8AD8','#9AE66E','#FFA24C','#E8E8F0'];
+const cycleColor = cyc => CYCLE_COLOR[Math.min(Math.max(cyc,1) - 1, CYCLE_COLOR.length - 1)];
 const TIER_NAME = ['Олигарх','Престиж','Знаменитость'];
 const TIER_FRAME = ['чёрная рамка','золотая рамка','бриллиантовая рамка'];
 // Римская запись круга: I, II, III, IV, ... без потолка
@@ -2411,6 +2530,7 @@ const VIP_UNLOCK = {
     0: {                                // Олигарх I
       [C.VAULT_UNLOCK_VIP]:   { pill:'🔐 сейфы',        text:'Начинают падать Сейфы Мажора' },
       [C.BATTERY_UNLOCK_VIP]: { pill:'🔋 аккумуляторы', text:'Начинают падать Аккумуляторы' },
+      [C.PARCEL_UNLOCK_VIP]:  { pill:'📮 бандероли',    text:'Начинают падать Бандероли' },
     },
     1: {},                              // Престиж I
     2: {},                              // Знаменитость I
@@ -2455,6 +2575,8 @@ function vipBuy(i,t){
   if(vaultJustOn) S.vaultOn = 1;
   const batJustOn = !!un && !S.batOn && i === C.BATTERY_UNLOCK_VIP;
   if(batJustOn) S.batOn = 1;
+  const parcelJustOn = !!un && !S.parcelOn && i === C.PARCEL_UNLOCK_VIP;
+  if(parcelJustOn) S.parcelOn = 1;
   /* Каждый выкупленный предмет: алмазы, плюс к баку и шаг к росту сброса.
      Бак и сброс считаются от числа выкупленного, отдельных полей не заводим. */
   earnGems(C.VIP_GEMS);
@@ -2486,6 +2608,16 @@ function vipBuy(i,t){
       '<h3 class="sh-h">Пошли Аккумуляторы</h3>' +
       '<p class="sh-p">Теперь они изредка попадаются прямо с тапа по банкомату и ложатся ' +
       'в багажник. Каждый доливает <b style="color:var(--gold)">+' + C.BATTERY_ENERGY + ' ⚡</b>.</p>' +
+      '<div class="sh-row"><button class="btn gold" data-act="close">Понял</button></div>'), 340);
+  }
+  if(parcelJustOn){
+    SFX.level(); haptic('ok');
+    setTimeout(()=>openSheet('<div class="bigem">📮</div>' +
+      '<h3 class="sh-h">Пошли Бандероли</h3>' +
+      '<p class="sh-p">Самая редкая находка на поле. Не сливается, вскрывается тапом. ' +
+      'Внутри сразу <b>' + C.PARCEL_PICKS + ' награды</b> из девяти — от алмазов и магнитов ' +
+      'до прибавки к максимуму монет.<br>Чем реже бандероль, тем щедрее: ' +
+      'каждая ступень редкости удваивает числа.</p>' +
       '<div class="sh-row"><button class="btn gold" data-act="close">Понял</button></div>'), 340);
   }
   if(vipDone(t) && t < 2){
@@ -3157,12 +3289,19 @@ function renderBoard(){
     if(!it){ if(cur) cell.innerHTML = ''; continue; }
     const rar = rarOf(it.l);
     const sig = it.l + ':' + (it.ch == null ? '-' : it.ch) + ':' + (it.sp == null ? '-' : it.sp)
-      + ':' + (it.vault == null ? '-' : 'v' + it.vault) + ':' + (it.bat ? 'b' : '-');
+      + ':' + (it.vault == null ? '-' : 'v' + it.vault) + ':' + (it.bat ? 'b' : '-')
+      + ':' + (it.parcel == null ? '-' : 'p' + it.parcel);
     if(cur && cur.dataset && cur.dataset.sig === sig) continue;
     if(it.vault != null){
       cell.innerHTML = '<div class="item vault" data-sig="' + sig + '" style="--rc:var(' +
         RAR_VAR[it.vault] + ')"><span class="em">🔐</span>' +
         '<span class="lv">' + RARITY[it.vault][0] + '</span></div>';
+      continue;
+    }
+    if(it.parcel != null){
+      cell.innerHTML = '<div class="item vault parcel r' + it.parcel + '" data-sig="' + sig +
+        '" style="--rc:var(' + RAR_VAR[it.parcel] + ')"><span class="em">📮</span>' +
+        '<span class="lv">' + RARITY[it.parcel][0] + '</span></div>';
       continue;
     }
     if(it.bat){
@@ -3482,7 +3621,7 @@ function renderVip(){
   let h = '';
   h += '<div class="vip ' + (t?'t'+t:'') + '" style="margin-bottom:10px">' +
     '<div class="vi">' + ['🕴️','👑','💠'][t] + '</div><div class="vb">' +
-    '<div class="vt">' + cycleName(t, S.cycle) + '</div>' +
+    '<div class="vt" style="color:' + cycleColor(S.cycle) + '">' + cycleName(t, S.cycle) + '</div>' +
     '<div class="vd">Собрано ' + owned + ' из ' + C.VIP_COUNT + ' · ' + TIER_FRAME[t] +
       ' · очков лиги за состояние: ' + fmt(vipBonus()) + '</div>' +
     '<div class="track" style="margin-top:6px"><div class="fill xp" style="width:' + (owned/C.VIP_COUNT*100) + '%"></div></div>' +
@@ -3499,6 +3638,8 @@ function renderVip(){
       soon.push(['🔐', C.VAULT_UNLOCK_VIP, 'Сейфы Мажора']);
     if(!S.batOn && vipUnlock(C.BATTERY_UNLOCK_VIP, t))
       soon.push(['🔋', C.BATTERY_UNLOCK_VIP, 'Аккумуляторы']);
+    if(!S.parcelOn && vipUnlock(C.PARCEL_UNLOCK_VIP, t))
+      soon.push(['📮', C.PARCEL_UNLOCK_VIP, 'Бандероли']);
     for(const [ic, idx, what] of soon)
       h += '<div class="note" style="margin:0 0 8px">' + ic + ' <b>' + nameOf(vipLvl(idx)) +
         '</b> — предмет №' + (idx + 1) + ' — открывает <b>' + what + '</b>. ' +
@@ -3541,6 +3682,9 @@ function renderTiers(){
   for(let t=0;t<3;t++){
     const btn = document.querySelector('.tier[data-tier="' + t + '"]');
     btn.querySelector('.tn').textContent = short[t] + rom;
+    // с круга II название витрины красится в цвет круга
+    if(S.cycle > 1) btn.querySelector('.tn').style.color = cycleColor(S.cycle);
+    else btn.querySelector('.tn').style.color = '';
     const open = tierOpen(t);
     btn.disabled = !open;
     // Красная точка — когда монет хватает хотя бы на один невыкупленный предмет
@@ -3763,6 +3907,7 @@ function tapCell(i){
   const it = S.board[i]; if(!it) return;
   if(it.vault != null){ openVault(i); return; }
   if(it.bat){ takeBattery(i); return; }
+  if(it.parcel != null){ openParcel(i); return; }
   const sp = specialOf(it);
   if(sp && it.ch != null && it.ch > 0){
     if(sp.type === 'producer'){
