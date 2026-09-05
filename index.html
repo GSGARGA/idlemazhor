@@ -597,6 +597,11 @@ const C = {
 
   XP_BASE:           50,     // опыт для 2-го уровня игрока
   XP_POW:            1.20,   // степень роста требований опыта
+  /* Со 200-го уровня опыт для следующего удваивается, и потом ещё вдвое
+     на каждой следующей сотне: 201–300 ×2, 301–400 ×4, 401–500 ×8. */
+  XP_HARD_FROM:      200,
+  XP_HARD_STEP:      100,
+  XP_HARD_MULT:      2,
   XP_PER_MERGE:      1,      // базовый опыт за мердж, множится на редкость
   XP_PER_QUEST_BONUS: 0.10,  // каждое выполненное задание даёт +10% ко всему опыту
   XP_PER_ORDER_LVL:  4,      // опыт за заказ = это * уровень, множится на редкость
@@ -683,6 +688,12 @@ const C = {
   MERGE_ALL_CD_MIN:  5,      // кулдаун «Магнита», когда зарядов нет
   MAGNET_PER_MERGES: 5,      // столько ручных слияний заряжают один бесплатный магнит
   MAGNET_PACK:       5,      // сколько магнитов в паке за алмазы
+  /* Наборы с энергией: цена считается от РАЗМЕРА БАКА, а не фиксированная.
+     Раньше «два полных бака» стоили 70 алмазов и на баке в 1000 превращались
+     в почти бесплатную заправку. rest — сколько стоит остальное в наборе. */
+  MIX_BUNDLE_OFF:    0.20,   // скидка набора против покупки по частям
+  MIX1_REST:         30,     // монеты и посылки в «Наборе игрока», алмазов
+  MIX2_REST:         60,     // монеты, посылки и магниты в «Большом заезде»
   BOOST_DROP2_MIN:   2,      // минут действия «Банкомат сошёл с ума»
 
   /* ===== БИЗНЕС-СООБЩЕСТВО (приглашённые друзья) =====
@@ -1429,7 +1440,13 @@ const energyPrice = (amount, offer) => Math.max(1, Math.ceil(
 // сколько не хватает до полного бака
 const energyGap = () => Math.max(0, Math.ceil(energyMax() - S.energy));
 const orderSlots= () => C.ORDER_SLOTS + (isPremium() ? C.ORDER_SLOTS_PREM : 0);
-const xpNeed = l => Math.round(C.XP_BASE * Math.pow(l, C.XP_POW));
+/* Множитель опыта на поздних уровнях: до XP_HARD_FROM обычный,
+   дальше XP_HARD_MULT в степени пройденных сотен. */
+function xpHard(l){
+  if(l <= C.XP_HARD_FROM) return 1;
+  return Math.pow(C.XP_HARD_MULT, 1 + Math.floor((l - C.XP_HARD_FROM - 1) / C.XP_HARD_STEP));
+}
+const xpNeed = l => Math.round(C.XP_BASE * Math.pow(l, C.XP_POW) * xpHard(l));
 // Цена предмета: экспонента по уровню, сверху множитель редкости
 const price = l => Math.round(C.SELL_BASE * Math.pow(C.SELL_POW, l-1) * RAR_COIN[rarOf(l)] *
   Math.pow(C.GALAXY_COIN_MULT, galaxyOf(l)-1));
@@ -2829,10 +2846,12 @@ const OFFER_POOL = [
     d:()=>'Восемь зарядов магнита, в запасе сейчас ' + (S.magnets|0) },
   { k:'bo',   ic:'🤑',  t:'Двойной банкомат',  gems:25,  min:15, give:{bo:20},
     d:()=>minTxt(20) + ' по две пачки за тап' },
-  { k:'mix1', ic:'🎁',  t:'Набор игрока',      gems:70,  min:30, give:{en:2, co:2, ch:2},
-    d:()=>'Два бака, кошелёк ×3 и две посылки' },
-  { k:'mix2', ic:'🧳',  t:'Большой заезд',     gems:120, min:25, give:{en:3, co:4, ch:3, mg:5},
-    d:()=>'Три бака, кошелёк ×5, три посылки и пять магнитов' },
+  { k:'mix1', ic:'🎁',  t:'Набор игрока',      min:30, give:{en:2, co:2, ch:2},
+    dyn:()=>mixPrice(2, C.MIX1_REST),
+    d:()=>'Два бака — ' + fmt(Math.round(energyMax()*2)) + ' ⚡, кошелёк ×3 и две посылки' },
+  { k:'mix2', ic:'🧳',  t:'Большой заезд',     min:25, give:{en:3, co:4, ch:3, mg:5},
+    dyn:()=>mixPrice(3, C.MIX2_REST),
+    d:()=>'Три бака — ' + fmt(Math.round(energyMax()*3)) + ' ⚡, кошелёк ×5, три посылки и пять магнитов' },
   { k:'prem', ic:'👑',  t:'Карта на три дня',  gems:200, min:45, give:{prem:3},
     d:()=>'Золотая карта на трое суток' },
 ];
@@ -3366,6 +3385,10 @@ function card(ic,t,d,btn,cls){
 }
 // Цена товара: у большинства фиксированная, у доливок энергии считается от объёма
 const goodPrice = id => { const g = GOODS[id]; return g ? (g.dyn ? g.dyn() : g.gems) : 0; };
+/* Цена набора: энергия по текущему баку плюс фиксированная часть, со скидкой.
+   Так набор всегда выгоднее, чем брать по отдельности, но не бесплатный. */
+const mixPrice = (tanks, rest) => Math.max(1, Math.round(
+  (energyPrice(energyMax()*tanks, true) + rest) * (1 - C.MIX_BUNDLE_OFF)));
 const gemBtn = id => '<button class="buy gem" data-act="gbuy" data-id="' + id + '">' + goodPrice(id) + ' 💎</button>';
 
 function renderShop(){
