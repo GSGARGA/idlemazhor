@@ -1331,9 +1331,14 @@ const $ = s => document.querySelector(s);
 const rndInt = (a,b) => a + Math.floor(Math.random()*(b-a+1));
 const pick = a => a[Math.floor(Math.random()*a.length)];
 const clamp = (v,a,b) => Math.max(a, Math.min(b,v));
-// Круги престижа уводят числа за триллионы, поэтому суффиксы идут до 10^90
-const SUF = ['','k','M','B','T','P','E','Z','Y','R','Q','aa','ab','ac','ad','ae','af','ag','ah','ai',
-             'aj','ak','al','am','an','ao','ap','aq','ar','as','at'];
+/* Круги престижа уводят числа далеко за триллионы. Суффиксы — общепринятые
+   в жанре сокращения короткой шкалы: квадриллион, квинтиллион, секстиллион
+   и так далее до тригинтиллиона, 10^93. */
+const SUF = ['','k','M','B','T',
+  'Qa','Qi','Sx','Sp','Oc','No','Dc',            // 10^15 … 10^33
+  'Ud','Dd','Td','Qad','Qid','Sxd','Spd','Ocd','Nod',   // 10^36 … 10^60
+  'Vg','Uvg','Dvg','Tvg','Qavg','Qivg','Sxvg','Spvg','Ocvg','Novg',  // 10^63 … 10^90
+  'Tg'];                                         // 10^93
 function fmt(n){
   if(!isFinite(n)) return '∞';
   n = Math.floor(n);
@@ -2238,15 +2243,18 @@ const BAG = [
 const bagItem = id => BAG.find(x => x.id === id) || null;
 /* Аккумулятор доливает бак и тратится. Льём даже сверх максимума —
    так же, как это делают канистры: иначе полный бак съедал бы предмет впустую. */
-function useBattery(){
+/* Окно не закрываем: жать «Применить» можно подряд, пока аккумуляторы есть.
+   src говорит, какое окно перерисовать — багажник или «зажевал карту». */
+function useBattery(src){
   if((S.battery|0) <= 0){ toast('Аккумуляторов нет'); SFX.err(); haptic('err'); return; }
   S.battery--;
   if(S.energy >= energyMax()) S.enTs = Date.now();
   S.energy += C.BATTERY_ENERGY;
-  closeSheet();
   toast('Аккумулятор: +' + C.BATTERY_ENERGY + ' ⚡');
   SFX.gem(); haptic('ok');
   renderAll(); save();
+  if(src === 'atm') offerEnergy();
+  else bagSheet('battery');
 }
 function bagSheet(id){
   const it = bagItem(id);
@@ -2260,7 +2268,7 @@ function bagSheet(id){
   const n = it.have();
   // Предмет, который применяют вручную, получает вторую кнопку
   const use = it.act && n > 0
-    ? '<button class="btn gold" data-act="' + it.act + '">Применить · +' +
+    ? '<button class="btn gold" data-act="' + it.act + '" data-src="bag">Применить · +' +
       C.BATTERY_ENERGY + ' ⚡</button>' : '';
   openSheet('<div class="bigem">' + it.ic + '</div>' +
     '<h3 class="sh-h">' + it.name + '<span class="pill g">' + n + '</span></h3>' +
@@ -2943,13 +2951,23 @@ function weekendActive(){ const d = new Date().getDay(); return (d === 0 || d ==
 function offerEnergy(){
   openSheet('<div class="bigem">⚡</div>' +
     '<h3 class="sh-h">Банкомат зажевал карту</h3>' +
-    '<p class="sh-p">Энергия на нуле. Само накапает по ' + regenPerMin() + ' в минуту, до полного бака ' +
-      mmss((energyMax()-S.energy)*regenSec()*1000) + '. Канистра доливает ' + (C.ENERGY_CAN_PCT*100) +
+    '<p class="sh-p">' +
+      (S.energy > energyMax()
+        ? 'В баке ' + Math.floor(S.energy) + ' ⚡ — это сверх максимума в ' + energyMax() + '. '
+        : S.energy === energyMax()
+        ? 'Бак полный: ' + energyMax() + ' ⚡. '
+        : S.energy > 0
+          ? 'В баке ' + Math.floor(S.energy) + ' из ' + energyMax() + '. Само накапает по ' +
+            regenPerMin() + ' в минуту, до полного ' +
+            mmss((energyMax()-S.energy)*regenSec()*1000) + '. '
+          : 'Энергия на нуле. Само накапает по ' + regenPerMin() + ' в минуту, до полного бака ' +
+            mmss(energyMax()*regenSec()*1000) + '. ') +
+      'Канистра доливает ' + (C.ENERGY_CAN_PCT*100) +
       '% бака, сейчас это ' + canEnergy() + ' ⚡. Или не ждём.</p>' +
     // Аккумулятор бесплатный, поэтому предлагаем его первым и отдельной строкой
     ((S.battery|0) > 0
-      ? '<div class="sh-row"><button class="btn gold" data-act="usebat" style="flex:1">🔋 Аккумулятор · +' +
-        C.BATTERY_ENERGY + ' ⚡ · в багажнике ' + (S.battery|0) + '</button></div>'
+      ? '<div class="sh-row"><button class="btn gold" data-act="usebat" data-src="atm" style="flex:1">' +
+        '🔋 Аккумулятор · +' + C.BATTERY_ENERGY + ' ⚡ · в багажнике ' + (S.battery|0) + '</button></div>'
       : '') +
     '<div class="sh-row"><button class="btn" data-act="close">Подожду</button>' +
     '<button class="btn pri" data-act="gbuy" data-id="energy_30">+' + canEnergy() + ' ⚡ · ' + goodPrice('energy_30') + ' 💎</button></div>' +
@@ -4012,7 +4030,7 @@ document.addEventListener('click', e=>{
     case 'bizrank':  bizClaimRank(); return;
     case 'crew':     crewSend(+b.dataset.i); return;
     case 'bag':      bagSheet(b.dataset.id || ''); return;
-    case 'usebat':   useBattery(); return;
+    case 'usebat':   useBattery(b.dataset.src || ''); return;
     case 'pack': PAY.buy(b.dataset.id); return;
     case 'gbuy': { const id = b.dataset.id; if(inSheet) $('#veil').classList.remove('on'); gemBuy(id); return; }
     case 'sell': {
