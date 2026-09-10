@@ -706,6 +706,13 @@ const C = {
 
   SELL_BASE:         5,      // цена продажи предмета 1-го уровня
   SELL_POW:          1.28,   // во сколько раз дороже каждый следующий уровень
+  /* Ранняя надбавка: до EARLY_TO уровня монет мало, а потолок кошелька уже
+     10 000 — начало игры выходило голодным. Множители считаются ОТ старых
+     чисел: продажа ×10, Касса ×5, заказ ×5. Действует только в первом витке. */
+  EARLY_TO:          21,     // до этого уровня (не включая) действует надбавка
+  EARLY_SELL:        10,     // во столько раз дороже «Сбагрить»
+  EARLY_SAFE:        5,      // во столько раз дороже Касса
+  EARLY_ORDER:       5,      // во столько раз дороже заказ
 
   MERGE_ALL_CD_MIN:  5,      // кулдаун «Магнита», когда зарядов нет
   MAGNET_PER_MERGES: 5,      // столько ручных слияний заряжают один бесплатный магнит
@@ -1608,9 +1615,19 @@ function xpHard(l){
   return Math.pow(C.XP_HARD_MULT, 1 + Math.floor((l - C.XP_HARD_FROM - 1) / C.XP_HARD_STEP));
 }
 const xpNeed = l => Math.round(C.XP_BASE * Math.pow(l, C.XP_POW) * xpHard(l));
+/* Ранняя надбавка действует только в первом витке: на втором «Цент II» стоит
+   уже триллионы, и умножать их на десять незачем. */
+const early = l => l < C.EARLY_TO && galaxyOf(l) === 1;
 // Цена предмета: экспонента по уровню, сверху множитель редкости
 const price = l => Math.round(C.SELL_BASE * Math.pow(C.SELL_POW, l-1) * RAR_COIN[rarOf(l)] *
-  Math.pow(C.GALAXY_COIN_MULT, galaxyOf(l)-1));
+  Math.pow(C.GALAXY_COIN_MULT, galaxyOf(l)-1) * (early(l) ? C.EARLY_SELL : 1));
+/* Касса и заказ считаются от price, поэтому их собственные множители на
+   ранних уровнях делятся на EARLY_SELL — иначе надбавка применилась бы
+   дважды и вышло бы ×10 вместо заказанных ×5. */
+const safeMult  = l => early(l) ? C.SAFE_MULT       * C.EARLY_SAFE  / C.EARLY_SELL : C.SAFE_MULT;
+const orderMult = l => early(l) ? C.ORDER_COIN_MULT * C.EARLY_ORDER / C.EARLY_SELL : C.ORDER_COIN_MULT;
+const safePrice  = l => Math.round(price(l) * safeMult(l));
+const orderCoins = l => Math.round(price(l) * orderMult(l));
 // Опыт за слияние и за заказ тоже растёт с редкостью
 const mergeXp = l => Math.round(C.XP_PER_MERGE * RAR_XP[rarOf(l)] * Math.pow(C.GALAXY_XP_MULT, galaxyOf(l)-1) * xpMult());
 const orderXp = l => Math.round(C.XP_PER_ORDER_LVL * Math.sqrt(l) * RAR_XP[rarOf(l)] / 2 * xpMult());
@@ -1646,7 +1663,7 @@ const cellOpen = i => i < S.rows * C.BOARD_COLS;
    пересечений кратностей быть не может. */
 const SPECIALS = [
   { type:'safe',     ch:1, ic:'🏦', name:'Касса',
-    desc:l=>'Тап: ' + fmt(price(l)*C.SAFE_MULT) + ' монет' },
+    desc:l=>'Тап: ' + fmt(safePrice(l)) + ' монет' },
   { type:'producer', ch:3, ic:'🏭', name:'Станок',
     desc:l=>'Тап: выдаёт ' + nameOf(Math.max(1, l - C.PRODUCER_BACK)) },
   { type:'energy',   ch:2, ic:'🔌', name:'Генератор',
@@ -2358,7 +2375,7 @@ function makeOrder(){
      чего игрок ещё не открыл: ограничиваем и увиденным. */
   const hi = clamp(Math.min(S.seen + 1, genMin() + C.ORDER_LVL_SPREAD), lo, C.MAX_LVL);
   const l = rndInt(lo, hi);
-  return { l, coins:price(l)*C.ORDER_COIN_MULT, xp:orderXp(l),
+  return { l, coins:orderCoins(l), xp:orderXp(l),
            chest: Math.random() < C.ORDER_CHEST_CHANCE,
            gems: Math.random() < C.ORDER_GEM_CHANCE ? rndInt(C.ORDER_GEMS[0], C.ORDER_GEMS[1]) : 0 };
 }
@@ -4336,7 +4353,7 @@ function tapCell(i){
       if(ni >= 0) popCell(ni);
       SFX.tap();
     } else if(sp.type === 'safe'){
-      let n = price(it.l) * C.SAFE_MULT;
+      let n = safePrice(it.l);
       n = gainCoins(n); quest('coins', n);
       toast('Касса: +' + fmt(n) + ' 🪙'); SFX.coin();
     } else if(sp.type === 'energy'){
