@@ -86,12 +86,22 @@ button{font:inherit;color:inherit;border:0;background:none;cursor:pointer}
 .order.ready{border-color:var(--green);box-shadow:0 0 0 1px var(--green) inset}
 .order .em{font-size:24px;line-height:1;position:relative;
   filter:drop-shadow(0 1px 3px rgba(0,0,0,.9))}
+/* Замок на ещё не купленный слот. Размер — как у обычной карточки:
+   слоты всегда одинаковой ширины, меняется только их число. */
+.order.lock{background:repeating-linear-gradient(45deg,#0C1219 0 6px,#0F1720 6px 12px);
+  border-color:#22303E;gap:2px}
+.order.lock .lk{font-size:18px;line-height:1;opacity:.7}
+.order.lock .lc{font-size:9px;line-height:1;opacity:.5}
+.order.lock:active{transform:scale(.95)}
 .order .em::before{content:'';position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
   width:150%;height:150%;border-radius:50%;z-index:-1;
   background:radial-gradient(circle, var(--lc,transparent) 0%, transparent 64%);opacity:.36}
 .order .nm{font-size:8.5px;color:var(--muted);font-weight:700;text-align:center;line-height:1.1;
   max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.order .rw{font-size:10px;font-weight:800;color:var(--gold)}
+/* Награда — всегда ОДНОЙ строкой. Без этого «123M🪙 8💎 📦» переносился
+   на вторую и выдавливал карточку за полосу. */
+.order .rw{font-size:10px;font-weight:800;color:var(--gold);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
 .order.empty{color:var(--dim);justify-content:center;font-size:10px;font-weight:700}
 .order .lvbadge{position:absolute;top:2px;right:4px;font-size:9px;font-weight:800;color:var(--dim)}
 #reroll{flex:0 0 44px;width:44px;background:var(--panel);border:1px solid var(--line);border-radius:13px;
@@ -363,6 +373,13 @@ h2.sec:first-child{margin-top:0}
 .card.gemhero{border-color:var(--gem);background:linear-gradient(160deg,#12303D,var(--panel) 62%)}
 .card.prem{border-color:var(--purple);background:linear-gradient(160deg,#241A33,var(--panel) 62%)}
 .card.done{opacity:.5}
+/* То, на что привёл переход из игры: замок слота, остывший магнит,
+   окно про свежие предложения */
+@keyframes cardflash{0%,100%{box-shadow:0 0 0 0 rgba(255,206,61,0)}
+  35%{box-shadow:0 0 0 2px var(--gold), 0 0 22px -4px var(--gold)}}
+.card.flash{animation:cardflash 1.5s ease-in-out 2}
+h2.sec.flash{color:var(--gold);animation:secflash 1.5s ease-in-out 2}
+@keyframes secflash{0%,100%{opacity:1}45%{opacity:.35}}
 .pill{display:inline-block;font-size:9px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;
   padding:2px 6px;border-radius:99px;border:1px solid currentColor;margin-left:6px;vertical-align:middle}
 .pill.g{color:var(--green)}.pill.o{color:var(--red)}.pill.p{color:var(--purple)}.pill.b{color:var(--gem)}
@@ -531,7 +548,7 @@ h2.sec:first-child{margin-top:0}
 
 /* ============ БЛОК КОНСТАНТ (весь баланс здесь) ============ */
 const C = {
-  SAVE_VERSION:      32,      // версия сейва; при росте запускается migrate()
+  SAVE_VERSION:      34,      // версия сейва; при росте запускается migrate()
   SAVE_KEY:          'bvs_save',
   SAVE_DEBOUNCE_MS:  700,    // задержка перед записью сейва
 
@@ -606,8 +623,13 @@ const C = {
   XP_PER_QUEST_BONUS: 0.10,  // каждое выполненное задание даёт +10% ко всему опыту
   XP_PER_ORDER_LVL:  4,      // опыт за заказ = это * уровень, множится на редкость
 
-  ORDER_SLOTS:       3,      // слотов заказов
+  /* Слоты заказов. На старте ОДИН — и он во всю ширину полосы, его видно.
+     Остальные три докупаются навсегда в «Навсегда», больше четырёх не бывает
+     ни при каких условиях. Раньше слотов было шесть (3 + карта + 2 перка),
+     шесть карточек делили 316 px и читались с трудом. */
+  ORDER_SLOTS:       1,      // слотов заказов на старте
   ORDER_SLOTS_PREM:  1,      // сколько добавляет Золотая карта
+  ORDER_SLOTS_CAP:   4,      // жёсткий потолок: больше не бывает никогда
   ORDER_REFRESH_SEC: 90,     // ожидание нового заказа после сдачи
   ORDER_COIN_MULT:   30,     // монет за заказ = цена предмета * это
   COIN_CAP_MIN:      10000,  // стартовый потолок кошелька, монет
@@ -702,6 +724,8 @@ const C = {
   /* ===== ПОСТОЯННЫЕ ПОКУПКИ ЗА АЛМАЗЫ =====
      Категории не было вообще: всё продавалось разово. Платят же за
      постоянную силу. Каждая берётся ограниченное число раз. */
+  /* +1 слот заказа. Двух хватает: 1 стартовый + 2 купленных + 1 от Золотой
+     карты = ровно потолок в 4. Третья покупка выводила бы за потолок. */
   PERK_SLOT:   [1500, 2],    // +1 слот заказа навсегда: цена, сколько раз
   PERK_BAK:    [800,  10],   // +100 к баку
   PERK_BAK_N:  100,
@@ -1212,8 +1236,10 @@ document.addEventListener('pointerdown', ()=>SFX.ready(), {once:true});
 
 /* ============ СОСТОЯНИЕ ============ */
 const CELLS = C.BOARD_COLS * C.BOARD_ROWS;
-/* Слотов в разметке: база + Золотая карта + все возможные докупленные */
-const SLOTS_MAX = C.ORDER_SLOTS + C.ORDER_SLOTS_PREM + C.PERK_SLOT[1];
+/* Потолок слотов. Разметка больше НЕ фиксированная: рисуем ровно столько
+   карточек, сколько слотов открыто, — тогда единственный стартовый заказ
+   занимает всю полосу и виден целиком. */
+const SLOTS_MAX = C.ORDER_SLOTS_CAP;
 function fresh(){
   return {
     v:C.SAVE_VERSION, savedAt:0,
@@ -1394,6 +1420,24 @@ function migrate(raw){
   s.parcelOn = (s.parcelOn|0) ? 1
     : ((Array.isArray(s.vip) && Array.isArray(s.vip[0]) && s.vip[0].indexOf(C.PARCEL_UNLOCK_VIP) >= 0)
        || (s.vipEver|0) > C.PARCEL_UNLOCK_VIP ? 1 : 0);
+  /* v32 → v33: база слотов заказа упала с трёх до одного, а докупить теперь
+     можно три вместо двух. У того, кто уже играет, слотов было 3 + купленные;
+     доливаем перками ровно столько, чтобы он НЕ ПОТЕРЯЛ ни одного. Потолок
+     четыре, поэтому у выкупивших оба перка (было пять) станет четыре. */
+  if((s.v|0) < 33){
+    const было = 3 + (s.perks.slot|0);
+    s.perks.slot = clamp(было - C.ORDER_SLOTS, 0, C.PERK_SLOT[1]);
+  }
+  /* v33 → v34: потолок покупок слота снижен с трёх до двух. Если у кого-то
+     успело набраться больше, лишнее срезаем, а деньги возвращаем по той же
+     лестнице цен, по которой он их платил. */
+  if((s.v|0) < 34 && s.perks.slot > C.PERK_SLOT[1]){
+    let назад = 0;
+    for(let i = C.PERK_SLOT[1]; i < s.perks.slot; i++)
+      назад += Math.max(1, Math.round(C.PERK_SLOT[0] * Math.pow(C.PERK_PRICE_UP, i)));
+    s.perks.slot = C.PERK_SLOT[1];
+    s.gems = Math.max(0, (s.gems|0) + назад);
+  }
   if(!Array.isArray(s.orders)) s.orders = [];
   s.orders = s.orders.filter(o=>o && typeof o.l === 'number');
   s.v = C.SAVE_VERSION;
@@ -1555,7 +1599,8 @@ const energyPrice = (amount, offer) => Math.max(1, Math.ceil(
   Math.max(0, amount) / 100 * (offer ? C.ENERGY_GEMS_OFFER : C.ENERGY_GEMS_PER_100)));
 // сколько не хватает до полного бака
 const energyGap = () => Math.max(0, Math.ceil(energyMax() - S.energy));
-const orderSlots= () => C.ORDER_SLOTS + (isPremium() ? C.ORDER_SLOTS_PREM : 0) + perkHave('slot');
+const orderSlots= () => Math.min(C.ORDER_SLOTS_CAP,
+  C.ORDER_SLOTS + (isPremium() ? C.ORDER_SLOTS_PREM : 0) + perkHave('slot'));
 /* Множитель опыта на поздних уровнях: до XP_HARD_FROM обычный,
    дальше XP_HARD_MULT в степени пройденных сотен. */
 function xpHard(l){
@@ -2251,8 +2296,11 @@ function countMergeable(){
 }
 function mergeAll(){
   const charged = (S.magnets|0) > 0;   // есть заряд — работает бесплатно и без ожидания
+  /* Магнит остывает, а зарядов нет — вести в магазин, а не ругаться тостом:
+     ровно там эту проблему и решают. */
   if(!charged && Date.now() < S.mergeAllUntil){
-    toast('Магнит остывает: ' + mmss(S.mergeAllUntil-Date.now())); SFX.err(); haptic('err'); return; }
+    toast('Магнит остывает: ' + mmss(S.mergeAllUntil-Date.now())); haptic('err');
+    goBuy('magnets_10'); return; }
   if(countMergeable() === 0){ toast('Сливать нечего'); SFX.err(); haptic('err'); return; }
   const was = S.seen;
   let total = 0, guard = 0;
@@ -2974,12 +3022,62 @@ const OFFER_POOL = [
   { k:'mix2', ic:'🧳',  t:'Большой заезд',     min:25, give:{en:3, co:4, ch:3, mg:5},
     dyn:()=>mixPrice(3, C.MIX2_REST),
     d:()=>'Три бака — ' + fmt(Math.round(energyMax()*3)) + ' ⚡, кошелёк ×5, три посылки и пять магнитов' },
-  { k:'prem', ic:'👑',  t:'Карта на три дня',  gems:200, min:45, give:{prem:3},
-    d:()=>'Золотая карта на трое суток' },
+  /* Монеты крупными множителями. co:N даёт N кошельков сверху, то есть
+     баланс становится ×(N+1) — так же, как в «Налике». */
+  { k:'co5',  ic:'🪙',  t:'Кошелёк ×5',        gems:70,  min:25, give:{co:4},
+    d:()=>'Баланс впятеро: +' + fmt(pctCoins(4, 12000)) + ' 🪙' },
+  { k:'co10', ic:'💰',  t:'Кошелёк ×10',       gems:140, min:20, give:{co:9},
+    d:()=>'Баланс вдесятеро: +' + fmt(pctCoins(9, 36000)) + ' 🪙' },
+  { k:'co30', ic:'🏦',  t:'Кошелёк ×30',       gems:390, min:15, give:{co:29},
+    d:()=>'Баланс в тридцать раз: +' + fmt(pctCoins(29, 120000)) + ' 🪙' },
+  /* Потолок кошелька — навсегда. Круги престижа его не сбрасывают, поэтому
+     это самая долгоживущая покупка в списке. */
+  { k:'cap5', ic:'🧾',  t:'+5% к потолку',     gems:80,  min:30, give:{cap:5},
+    d:()=>'Максимум монет навсегда выше: ' + fmt(coinCap()) + ' → ' + fmt(Math.round(coinCap()*1.05)) },
+  { k:'cap10',ic:'📈',  t:'+10% к потолку',    gems:150, min:25, give:{cap:10},
+    d:()=>'Максимум монет навсегда выше: ' + fmt(coinCap()) + ' → ' + fmt(Math.round(coinCap()*1.10)) },
+  { k:'cap15',ic:'🏛️', t:'+15% к потолку',    gems:210, min:20, give:{cap:15},
+    d:()=>'Максимум монет навсегда выше: ' + fmt(coinCap()) + ' → ' + fmt(Math.round(coinCap()*1.15)) },
+  /* Сейфы и бандероли падают прямо на поле — их надо вскрыть тапом.
+     Показываем только тем, у кого они уже отперты вехой: иначе предложение
+     объясняло бы предмет, которого игрок ещё ни разу не видел. */
+  { k:'vt1',  ic:'🔐',  t:'Два сейфа Мажора',  gems:90,  min:25, give:{vault:2, vrar:1},
+    if:()=>!!S.vaultOn,
+    d:()=>'Два редких сейфа сразу на поле — вскрывай тапом' },
+  { k:'vt2',  ic:'🗝️',  t:'Пять сейфов',       gems:200, min:20, give:{vault:5, vrar:2},
+    if:()=>!!S.vaultOn,
+    d:()=>'Пять эпических сейфов на поле' },
+  { k:'pc1',  ic:'📮',  t:'Бандероль',         gems:120, min:25, give:{parcel:1, prar:2},
+    if:()=>!!S.parcelOn,
+    d:()=>'Эпическая бандероль на поле — ' + C.PARCEL_PICKS + ' награды из одной' },
+  { k:'pc2',  ic:'📯',  t:'Три бандероли',     gems:320, min:20, give:{parcel:3, prar:3},
+    if:()=>!!S.parcelOn,
+    d:()=>'Три легендарных бандероли — ' + (C.PARCEL_PICKS*3) + ' наград' },
+  { k:'ch3',  ic:'🏭',  t:'Пятнадцать посылок',gems:250, min:20, give:{ch:15},
+    d:()=>'Пятнадцать вскрытий одной кнопкой' },
 ];
+/* Положить на поле n сейфов или бандеролей заданной редкости. Уровень берём
+   такой же, какой сейчас даёт банкомат, — предмет под ними должен смотреться
+   своим. Если клеток не хватило, говорим честно, сколько влезло. */
+function dropSpecial(kind, n, rar){
+  let дали = 0;
+  for(let k=0;k<n;k++){
+    const i = firstEmpty();
+    if(i < 0) break;
+    const l = clamp(genRoll(), 1, C.MAX_LVL);
+    S.board[i] = kind === 'vault' ? { l, ch:null, sp:null, vault:rar }
+                                  : { l, ch:null, sp:null, parcel:rar };
+    if(l > S.seen) S.seen = l;
+    popCell(i); дали++;
+  }
+  checkFull();
+  if(дали < n) toast('На поле влезло ' + дали + ' из ' + n + ' — освободи клетки');
+  return дали;
+}
 function makeOffer(){
   const busy = S.offers.map(o=>o.k);
-  const free = OFFER_POOL.filter(o=>busy.indexOf(o.k) < 0);
+  // if() отсеивает то, чего игрок ещё не открыл: сейфы, бандероли
+  const free = OFFER_POOL.filter(o=>busy.indexOf(o.k) < 0 && (!o.if || o.if()));
   if(!free.length) return null;
   const tpl = pick(free);
   return { k:tpl.k, until: Date.now() + tpl.min*60000 };
@@ -2992,6 +3090,14 @@ function addOffer(){
   renderAlerts();
   return true;
 }
+/* Доливаем полку СРАЗУ до потолка. Раньше приходило по одному раз в десять
+   минут, и три предложения набирались только через полчаса — игрок видел
+   пустой раздел с единственной карточкой. Возвращает, сколько добавилось. */
+function fillOffers(){
+  let n = 0;
+  while(S.offers.length < C.OFFER_MAX && addOffer()) n++;
+  return n;
+}
 // Чистим просроченные и подсыпаем новые по таймеру
 function tickOffers(){
   const n = S.offers.length;
@@ -3001,10 +3107,32 @@ function tickOffers(){
     /* Таймер двигаем ТОЛЬКО когда предложение реально появилось. Раньше он
        сдвигался в любом случае — и если места были заняты или подходящего
        оффера не нашлось, очередь сгорала впустую. */
-    if(addOffer()){ S.offerNextAt = Date.now() + C.OFFER_EVERY_MIN*60000; changed = true; }
+    const дали = fillOffers();
+    if(дали){ S.offerNextAt = Date.now() + C.OFFER_EVERY_MIN*60000; changed = true;
+              offerNudge(дали); }
     else S.offerNextAt = Date.now() + C.OFFER_RETRY_MIN*60000;
   }
   return changed;
+}
+/* Окно про свежую полку. Предложения живут 15–30 минут и умирают молча,
+   поэтому о них надо сказать вслух — иначе игрок просто не заходит в раздел
+   и не видит, что там что-то было. */
+function offerNudge(n){
+  if(veilOpen()) return;                       // не перебиваем другое окно
+  const список = S.offers.map(o=>OFFER_POOL.find(x=>x.k === o.k)).filter(Boolean);
+  if(!список.length) return;
+  const ближайший = Math.min.apply(null, S.offers.map(o=>o.until - Date.now()));
+  openSheet('<div class="bigem">🎪</div>' +
+    '<h3 class="sh-h">' + (n > 1 ? 'Выкатили ' + n + ' предложения' : 'Новое предложение') + '</h3>' +
+    '<p class="sh-p">Пока дают — потом уберут. Ближайшее сгорит через ' +
+      mmss(ближайший) + '.</p>' +
+    '<div class="loot">' + список.map(t =>
+      '<div class="lootrow" style="--lc:var(--gold)"><span class="li">' + t.ic + '</span>' +
+      '<span class="lt">' + t.t + '</span>' +
+      '<span class="lr">' + (t.dyn ? t.dyn() : t.gems) + ' 💎</span></div>').join('') +
+    '</div>' +
+    '<div class="sh-row"><button class="btn" data-act="close">Потом</button>' +
+    '<button class="btn gold" data-act="tooffers">Посмотреть</button></div>');
 }
 function offerBuy(i){
   const o = S.offers[i];
@@ -3019,6 +3147,9 @@ function offerBuy(i){
   if(g.mg){ S.magnets = (S.magnets|0) + g.mg; }
   if(g.bo){ S.drop2Until = Math.max(S.drop2Until, Date.now()) + g.bo*60000; }
   if(g.prem){ S.premiumUntil = Math.max(S.premiumUntil, Date.now()) + g.prem*86400000; fillOrders(); }
+  if(g.cap){ S.capMul = Math.max(1, S.capMul||1) * (1 + g.cap/100); }
+  if(g.vault){ dropSpecial('vault', g.vault, g.vrar|0); }
+  if(g.parcel){ dropSpecial('parcel', g.parcel, g.prar|0); }
   if(g.ch){ chests = g.ch; }
   S.offers.splice(i,1);
   /* Покупка запускает откат. Без этого можно было взять предложение, выйти,
@@ -3326,6 +3457,8 @@ function openSheet(html){
   $('#veil').classList.add('on');
 }
 function closeSheet(){ $('#veil').classList.remove('on'); if(askRes){ askRes(false); askRes = null; } }
+// открыто ли какое-нибудь окно — чтобы не перебивать его своим
+function veilOpen(){ return $('#veil').classList.contains('on'); }
 function ask(title,text,ok){
   return new Promise(res=>{
     askRes = res;
@@ -3403,7 +3536,9 @@ function renderHud(){
   const pairs = countMergeable(), cd = S.mergeAllUntil - Date.now();
   const charged = (S.magnets|0) > 0;
   const bm = $('#btnMergeAll');
-  bm.disabled = pairs === 0 || (!charged && cd > 0);
+  /* На кулдауне кнопка НЕ гаснет: тап по ней уводит в магазин за магнитами.
+     Гасим только когда сливать нечего — там покупка ничего не даст. */
+  bm.disabled = pairs === 0 && !(!charged && cd > 0);
   bm.classList.toggle('hot', charged && pairs > 0);
   bm.classList.toggle('cooling', !charged && cd > 0);
   // Подпись: заряды → «МАГНИТ», кулдаун → таймер, иначе прогресс до следующего заряда
@@ -3488,12 +3623,18 @@ function renderBoard(){
       (it.ch != null ? '<span class="ch">' + it.ch + '</span>' : '') + '</div>';
   }
 }
-// Слотов заказов в разметке ВСЕГДА SLOTS_MAX — иначе полоса дёргалась бы
-// при покупке Золотой карты. Лишний слот показываем закрытым.
+/* Слотов в полосе всегда четыре: открытые и замки на ещё не купленные.
+   Раньше их было шесть (3 база + карта + 2 перка) и карточки не читались.
+   Тап по замку открывает магазин прямо на карточке слота. */
 function renderOrders(){
   let h = '';
-  for(let s=0;s<SLOTS_MAX;s++){
-    if(s >= orderSlots()){ h += '<div class="order empty">🔒<br>👑</div>'; continue; }
+  const n = orderSlots();
+  for(let s=0;s<C.ORDER_SLOTS_CAP;s++){
+    if(s >= n){
+      h += '<button class="order lock" data-act="slotbuy"><span class="lk">🔒</span>' +
+           '<span class="lc">💎</span></button>';
+      continue;
+    }
     const o = S.orders[s];
     if(!o){
       const left = isPremium() ? 0 : Math.max(0, S.orderCdUntil - Date.now());
@@ -3507,13 +3648,35 @@ function renderOrders(){
       (byCrew ? '<span class="crewb">👷</span>' : '') +
       '<span class="em" style="--lc:' + lvlHue(o.l) + '">' + emo(o.l) + '</span>' +
       '<span class="nm">' + nameOf(o.l) + '</span>' +
-      '<span class="rw">' + fmt(o.coins) + '🪙' + (o.gems ? ' ' + o.gems + '💎' : '') + (o.chest ? ' 📦' : '') + '</span></button>';
+      '<span class="rw">' + fmt(o.coins) + '🪙' + (o.gems ? ' ' + o.gems + '💎' : '') +
+      (o.chest ? ' 📦' : '') + '</span></button>';
   }
   $('#orders').innerHTML = h;
 }
-function card(ic,t,d,btn,cls){
-  return '<div class="card' + (cls ? ' '+cls : '') + '"><div class="ci">' + ic + '</div>' +
+function card(ic,t,d,btn,cls,anchor){
+  return '<div class="card' + (cls ? ' '+cls : '') + '"' +
+    (anchor ? ' data-buy="' + anchor + '"' : '') + '><div class="ci">' + ic + '</div>' +
     '<div class="cb"><div class="ct">' + t + '</div><div class="cd">' + d + '</div></div>' + (btn||'') + '</div>';
+}
+/* Открыть магазин прямо на нужном товаре: замок слота, остывший магнит и
+   окно про свежие предложения ведут сюда, чтобы не искать карточку руками.
+   Якорь держим в переменной: магазин перерисовывается раз в секунду из-за
+   таймеров, и класс, повешенный один раз, тут же стирался бы. */
+let flashAt = '', flashUntil = 0;
+function goBuy(anchor){
+  flashAt = anchor; flashUntil = Date.now() + 3500;
+  go('shop');
+  requestAnimationFrame(()=>{
+    const el = document.querySelector('#shopBody [data-buy="' + anchor + '"]');
+    if(el) el.scrollIntoView({ block:'center', behavior:'smooth' });
+  });
+}
+// вешает подсветку заново после каждой перерисовки магазина
+function applyFlash(){
+  if(!flashAt) return;
+  if(Date.now() > flashUntil){ flashAt = ''; return; }
+  const el = document.querySelector('#shopBody [data-buy="' + flashAt + '"]');
+  if(el) el.classList.add('flash');
 }
 // Цена товара: у большинства фиксированная, у доливок энергии считается от объёма
 /* Множитель цен по прогрессу: чем выше минимальный сброс банкомата, тем
@@ -3611,7 +3774,7 @@ function renderShop(){
       left
         ? '<button class="buy gem" data-act="perk" data-k="' + k + '"' +
           (S.gems < pr ? ' disabled' : '') + '>' + fmt(pr) + ' 💎</button>'
-        : '<button class="buy" disabled>готово</button>');
+        : '<button class="buy" disabled>готово</button>', '', 'perk-' + k);
   }
   h += '<div class="note" style="margin:0 0 10px">Каждое следующее того же вида дороже в ' +
     C.PERK_PRICE_UP + ' раза. Это не расходник — остаётся навсегда, круги престижа не сбрасывают.</div>';
@@ -3630,14 +3793,14 @@ function renderShop(){
   h += card('🧲','Пять магнитов',
     'Заряженный магнит слипает всё поле сразу и без ожидания. В запасе: ' + (S.magnets|0) +
     '. Один заряд и так даётся за каждые ' + C.MAGNET_PER_MERGES + ' слияний руками — сейчас ' +
-    (S.mergeStreak|0) + ' из ' + C.MAGNET_PER_MERGES + '.', gemBtn('magnets_10'));
+    (S.mergeStreak|0) + ' из ' + C.MAGNET_PER_MERGES + '.', gemBtn('magnets_10'), '', 'magnets_10');
 
   h += '<h2 class="sec">Жизнь мажора</h2>';
   h += card('👑','Золотая карта' + (isPremium() ? '<span class="pill p">в кармане</span>' : ''),
     isPremium() ? 'Гуляешь до ' + new Date(S.premiumUntil).toLocaleDateString('ru-RU') +
         '. Когда кончится, бак сдуется на ' + (C.PREM_ENERGY_PCT*100) + '%, накопленное сверху останется.'
       : 'Бак больше на ' + (C.PREM_ENERGY_PCT*100) + '% — сейчас это +' +
-        Math.round(energyMax()*C.PREM_ENERGY_PCT) + ' ⚡. Плюс вдвое быстрее наливается, четвёртый слот заказа, посылка каждый день и заказы без ожидания. На ' + C.PREM_DAYS + ' дней.',
+        Math.round(energyMax()*C.PREM_ENERGY_PCT) + ' ⚡. Плюс вдвое быстрее наливается, ещё один слот заказа, посылка каждый день и заказы без ожидания. На ' + C.PREM_DAYS + ' дней.',
     isPremium() ? '<button class="buy" disabled>в кармане</button>' : gemBtn('premium_week'), 'prem');
 
   h += '<h2 class="sec">Налик</h2>';
@@ -3651,7 +3814,7 @@ function renderShop(){
   }
 
   if(S.offers.length || weekendActive() || (!S.starterDone && S.starterUntil > Date.now())){
-    h += '<h2 class="sec">Пока дают</h2>';
+    h += '<h2 class="sec" data-buy="offers">Пока дают</h2>';
     // Живые предложения: у каждого свой таймер, по истечении исчезает
     for(let i=0;i<S.offers.length;i++){
       const o = S.offers[i], tpl = OFFER_POOL.find(x=>x.k === o.k);
@@ -3672,6 +3835,7 @@ function renderShop(){
     (PAY.mode === 'mock' ? 'Звёзды не списываются, алмазы начисляются локально — так и задумано, пока не подключён бэкенд.'
                          : 'Счёт выставляет бот, алмазы зачисляет сервер.') + '</div>';
   $('#shopBody').innerHTML = h;
+  applyFlash();
 }
 function renderChests(){
   let h = '';
@@ -4219,11 +4383,15 @@ document.addEventListener('click', e=>{
     case 'no': closeSheet(); return;
     case 'toshop': closeSheet(); go('shop'); return;
     case 'tobiz':  closeSheet(); go('biz'); bizSync(true); return;
+    // из окна про свежие предложения — прямо к разделу «Пока дают»
+    case 'tooffers': closeSheet(); goBuy('offers'); return;
     case 'bizshare': bizShare(); return;
     case 'bizcopy':  bizCopy(); return;
     case 'bizclaim': bizClaim(b.dataset.id); return;
     case 'bizrank':  bizClaimRank(); return;
     case 'perk':     perkBuy(b.dataset.k); return;
+    // замок слота заказа — в магазин, на карточку «Ещё один слот заказа»
+    case 'slotbuy':  goBuy('perk-slot'); return;
     case 'crew':     crewSend(+b.dataset.i); return;
     case 'bag':      bagSheet(b.dataset.id || ''); return;
     case 'usebat':   useBattery(b.dataset.src || ''); return;
