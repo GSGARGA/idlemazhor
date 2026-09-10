@@ -531,7 +531,7 @@ h2.sec:first-child{margin-top:0}
 
 /* ============ БЛОК КОНСТАНТ (весь баланс здесь) ============ */
 const C = {
-  SAVE_VERSION:      31,      // версия сейва; при росте запускается migrate()
+  SAVE_VERSION:      32,      // версия сейва; при росте запускается migrate()
   SAVE_KEY:          'bvs_save',
   SAVE_DEBOUNCE_MS:  700,    // задержка перед записью сейва
 
@@ -691,6 +691,25 @@ const C = {
   /* Наборы с энергией: цена считается от РАЗМЕРА БАКА, а не фиксированная.
      Раньше «два полных бака» стоили 70 алмазов и на баке в 1000 превращались
      в почти бесплатную заправку. rest — сколько стоит остальное в наборе. */
+  /* ===== ИНДЕКСАЦИЯ ЦЕН =====
+     Раньше дорожала только энергия — она привязана к размеру бака. Всё
+     остальное стояло на стартовых ценах, и на 300-м уровне посылка за 45
+     алмазов делала то же, что энергия за 596. Теперь товары дорожают
+     вместе с минимальным сбросом банкомата. */
+  PRICE_INDEX_DIV:   40,     // цена = база × (1 + минимальный сброс / это)
+  PRICE_INDEX_MAX:   8,      // но не дороже чем в столько раз
+
+  /* ===== ПОСТОЯННЫЕ ПОКУПКИ ЗА АЛМАЗЫ =====
+     Категории не было вообще: всё продавалось разово. Платят же за
+     постоянную силу. Каждая берётся ограниченное число раз. */
+  PERK_SLOT:   [1500, 2],    // +1 слот заказа навсегда: цена, сколько раз
+  PERK_BAK:    [800,  10],   // +100 к баку
+  PERK_BAK_N:  100,
+  PERK_REGEN:  [1200, 5],    // +1 к восстановлению в минуту
+  PERK_COIN:   [1000, 10],   // +10% монет за заказ навсегда
+  PERK_COIN_N: 0.10,
+  PERK_PRICE_UP: 1.6,        // каждая следующая покупка того же типа дороже
+
   MIX_BUNDLE_OFF:    0.20,   // скидка набора против покупки по частям
   MIX1_REST:         30,     // монеты и посылки в «Наборе игрока», алмазов
   MIX2_REST:         60,     // монеты, посылки и магниты в «Большом заезде»
@@ -843,6 +862,7 @@ const LEGAL = {
 
 /* ============ ПАКИ АЛМАЗОВ ЗА STARS ============
    Единственное место, где тратятся звёзды. Выгода растёт с ценой. */
+/* Паки алмазов. ДОЛЖНЫ совпадать с PACKS в worker.js. */
 const PACKS = [
   { id:'gems_25',  stars:25,  gems:200,  em:'💠', title:'Горсть',   bonus:0  },
   { id:'gems_50',  stars:50,  gems:440,  em:'💎', title:'Мешочек',  bonus:10 },
@@ -850,6 +870,64 @@ const PACKS = [
   { id:'gems_250', stars:250, gems:2800, em:'🧰', title:'Сундук',   bonus:40 },
   { id:'gems_500', stars:500, gems:6400, em:'🏦', title:'Сейф',     bonus:60 },
 ];
+
+/* Товары за звёзды, которые дают НЕ алмазы. Раньше их не было вовсе:
+   всё продавалось через алмазы, и на высоком уровне пак покупал пять тапов.
+   Здесь звёзды сразу превращаются в то, ради чего играют.
+   ДОЛЖНЫ совпадать с PACKS в worker.js — id, цена и содержимое. */
+const STAR_GOODS = [
+  { id:'prem_7',  stars:60,  em:'👑', title:'Золотая карта · 7 дней',
+    d:()=>'Бак +' + Math.round(C.PREM_ENERGY_PCT*100) + '%, восстановление ×' + C.PREM_REGEN_MULT +
+      ', +' + C.ORDER_SLOTS_PREM + ' слот заказа и посылка каждый день.<br>' +
+      'Сейчас это <b>' + Math.floor(regenPerMin()*C.PREM_REGEN_MULT*60/tapCost()) +
+      ' тапов в час</b> вместо ' + Math.floor(regenPerMin()*60/tapCost()) + '.',
+    give:{ prem:7 } },
+  { id:'prem_30', stars:199, em:'👑', title:'Золотая карта · 30 дней', tag:'выгоднее втрое',
+    d:()=>'Тот же набор, но на месяц. В пересчёте на день — втрое дешевле недельной.',
+    give:{ prem:30 } },
+  { id:'vip_box', stars:149, em:'🎁', title:'ВИП-посылка', tag:'всё сразу',
+    d:()=>'Полный бак, 10 посылок, 15 магнитов, 10 аккумуляторов, 10 подрядчиков ' +
+      'и 1500 алмазов. Одной кнопкой — на неделю игры.',
+    give:{ enFull:1, ch:10, mg:15, batt:10, crew:10, gems:1500 } },
+  { id:'starter', stars:39, em:'🚀', title:'Набор новичка', tag:'один раз', once:true,
+    d:()=>'Три полных бака, 5 посылок, 5 магнитов, 3 подрядчика и 600 алмазов. ' +
+      'Берётся однажды за всю игру.',
+    give:{ enTanks:3, ch:5, mg:5, crew:3, gems:600 } },
+];
+const starGood = id => STAR_GOODS.find(x=>x.id === id) || null;
+
+/* Выдача товара за звёзды. Возвращает список строк для окна. */
+function giveStarGood(id){
+  const g = starGood(id); if(!g) return [];
+  const v = g.give, out = [];
+  if(v.prem){ S.premiumUntil = Math.max(S.premiumUntil, Date.now()) + v.prem*86400000;
+              fillOrders(); out.push('Золотая карта на ' + v.prem + ' дней'); }
+  if(v.enFull){ if(S.energy >= energyMax()) S.enTs = Date.now();
+                S.energy = Math.max(S.energy, energyMax()); out.push('Полный бак — ' + energyMax() + ' ⚡'); }
+  if(v.enTanks){ if(S.energy >= energyMax()) S.enTs = Date.now();
+                 S.energy += energyMax()*v.enTanks;
+                 out.push('+' + fmt(energyMax()*v.enTanks) + ' ⚡ энергии'); }
+  if(v.gems){ S.gems += v.gems; S.boughtApplied = (S.boughtApplied|0); out.push('+' + fmt(v.gems) + ' 💎'); }
+  if(v.ch){   S.pendingChests = (S.pendingChests|0) + v.ch; out.push('+' + v.ch + ' 📦 посылок'); }
+  if(v.mg){   S.magnets = (S.magnets|0) + v.mg;             out.push('+' + v.mg + ' 🧲 магнитов'); }
+  if(v.batt){ S.battery = (S.battery|0) + v.batt;           out.push('+' + v.batt + ' 🔋 аккумуляторов'); }
+  if(v.crew){ S.crew = (S.crew|0) + v.crew;                 out.push('+' + v.crew + ' 👷 подрядчиков'); }
+  return out;
+}
+/* Показ окна. Начисление сюда НЕ входит: иначе товар выдавался бы дважды —
+   один раз при выдаче, второй при показе. */
+function showStarGood(id, lines){
+  const g = starGood(id); if(!g) return;
+  SFX.level(); haptic('ok');
+  openSheet('<div class="bigem">' + g.em + '</div>' +
+    '<h3 class="sh-h">' + g.title + '</h3>' +
+    '<div class="loot wrap">' + lines.map(t=>'<div class="lootrow" style="--lc:var(--gold)">' +
+      '<span class="li">✔</span><span class="lt">' + t + '</span></div>').join('') + '</div>' +
+    '<div class="sh-row"><button class="btn gold" data-act="close">Забрать</button></div>');
+  renderAll(); save();
+}
+// Выдать и сразу показать — путь обычной покупки
+function starGoodDone(id){ showStarGood(id, giveStarGood(id)); }
 
 /* =====================================================================
    ПЛАТЕЖИ. Клиент не выставляет счета: ссылку делает бот через
@@ -861,14 +939,16 @@ const PAY = {
   mode: 'live',                                          // боевой режим: звёзды списываются по-настоящему
   backend: 'https://mazhor-pay.vertoprah02.workers.dev', // сервер оплаты на Cloudflare
   async buy(packId){
-    const p = PACKS.find(x=>x.id === packId);
+    const p = PACKS.find(x=>x.id === packId) || starGood(packId);
     if(!p) return;
+    const isGood = !p.gems;                    // товар, а не пак алмазов
     if(this.mode === 'mock'){
       const ok = await ask('Покупка понарошку',
         p.title + ' — ' + p.gems + ' 💎 за ' + p.stars + ' ⭐\n\nБэкенда пока нет: звёзды не спишутся, алмазы дадим.',
         'Забрать');
       if(!ok) return;
-      addGems(p.gems, 'Купил ' + p.title.toLowerCase());
+      if(isGood){ S.invApplied[packId] = ((S.invApplied[packId])|0) + 1; starGoodDone(packId); }
+      else addGems(p.gems, 'Купил ' + p.title.toLowerCase());
       return;
     }
     try{
@@ -891,9 +971,20 @@ const PAY = {
            хранилище Cloudflare отдаёт свежую запись не мгновенно. Двойного
            начисления не будет: boughtApplied двигаем вместе с алмазами, и когда
            сервер догонит, разница окажется нулевой. */
-        S.gems += p.gems;
-        S.boughtApplied = (S.boughtApplied|0) + p.gems;
-        payDone(p.gems, p);
+        if(isGood){
+          // товар: помечаем выданным и показываем, что пришло
+          S.invApplied[packId] = ((S.invApplied[packId])|0) + 1;
+          S.payPending = 0; S.payPack = ''; saveNow();
+          starGoodDone(packId);
+        } else {
+          // первая покупка удваивает алмазы — разово за всю игру
+          const dbl = !S.firstBuy;
+          const got = dbl ? p.gems*2 : p.gems;
+          if(dbl) S.firstBuy = 1;
+          S.gems += got;
+          S.boughtApplied = (S.boughtApplied|0) + p.gems;
+          payDone(got, p, dbl);
+        }
         // Тихая сверка с сервером чуть позже — на случай покупки с другого телефона
         setTimeout(()=>pullServer(), C.PAY_SYNC_SEC*1000);
       });
@@ -918,6 +1009,17 @@ async function pullServer(){
       renderAll(); save();
       // Ждали платёж и он пришёл — показываем окно прямо в игре, кто бы ни спросил сервер
       if(diff > 0 && S.payPending){ payDone(diff); return; }
+    }
+    /* Товары за звёзды сервер считает поштучно. Выдаём разницу между тем,
+       что он насчитал, и тем, что игра уже выдала — тем же способом, что и алмазы. */
+    if(d.inv && typeof d.inv === 'object'){
+      let дали = '', строки = [];
+      for(const g of STAR_GOODS){
+        const было = (S.invApplied[g.id])|0, стало = (d.inv[g.id])|0;
+        for(let k=было;k<стало;k++){ строки = строки.concat(giveStarGood(g.id)); дали = g.id; }
+        if(стало > было) S.invApplied[g.id] = стало;
+      }
+      if(дали){ S.payPending = 0; S.payPack = ''; saveNow(); showStarGood(дали, строки); return; }
     }
     renderAll(); save();
   }catch(e){}
@@ -1110,7 +1212,8 @@ document.addEventListener('pointerdown', ()=>SFX.ready(), {once:true});
 
 /* ============ СОСТОЯНИЕ ============ */
 const CELLS = C.BOARD_COLS * C.BOARD_ROWS;
-const SLOTS_MAX = C.ORDER_SLOTS + C.ORDER_SLOTS_PREM;   // слотов в разметке всегда столько
+/* Слотов в разметке: база + Золотая карта + все возможные докупленные */
+const SLOTS_MAX = C.ORDER_SLOTS + C.ORDER_SLOTS_PREM + C.PERK_SLOT[1];
 function fresh(){
   return {
     v:C.SAVE_VERSION, savedAt:0,
@@ -1134,6 +1237,9 @@ function fresh(){
     capHour:'', capCoinUsed:0, capGemUsed:0,   // час и сколько докупок в нём сделано
     daily:[], bakBonus:0,  // задания на день и прибавка к баку, добытая ими
     magnets:0, mergeStreak:0,   // заряды магнита и счётчик ручных слияний до следующего
+    perks:{slot:0, coin:0, bak:0, regen:0},   // купленные навсегда усиления
+    invApplied:{},          // какие товары за звёзды уже выданы (кроме алмазов)
+    firstBuy:0,             // первая покупка ×2 уже использована
     crew:C.START_CREW, battery:C.START_BATTERY,   // багажник: стартовый набор
     crewDay:'', crewUsed:0,          // день и сколько заказов закрыто подрядчиками
     vaultOn:0,             // выкуплен Самолёт — сейфы начали падать. Круг престижа это не сбрасывает
@@ -1270,6 +1376,11 @@ function migrate(raw){
   // v30 → v31: багажник и подрядчики
   s.crew = Math.max(0, s.crew|0);
   s.battery = Math.max(0, s.battery|0);   // v31: аккумуляторы
+  // v31 → v32: постоянные усиления, товары за звёзды, первая покупка
+  if(!s.perks || typeof s.perks !== 'object') s.perks = { slot:0, coin:0, bak:0, regen:0 };
+  for(const k of ['slot','coin','bak','regen']) s.perks[k] = Math.max(0, s.perks[k]|0);
+  if(!s.invApplied || typeof s.invApplied !== 'object') s.invApplied = {};
+  s.firstBuy = s.firstBuy ? 1 : 0;
   s.crewDay = String(s.crewDay || '');
   s.crewUsed = Math.max(0, s.crewUsed|0);
   /* v31: сейфы отпираются Самолётом. Тем, кто его уже проходил в этом круге
@@ -1426,7 +1537,7 @@ const isPremium = () => S.premiumUntil > Date.now();
 // Сколько предметов выкуплено во всех трёх витринах за текущий круг
 const vipCount = () => (S.vip||[]).reduce((n,a)=>n + (a ? a.length : 0), 0) + (S.vipEver|0);
 const energyMax = () => Math.round((C.ENERGY_MAX + (S.level-1)*C.ENERGY_PER_LEVEL
-    + vipCount()*C.VIP_ENERGY + (S.bakBonus|0)) *
+    + vipCount()*C.VIP_ENERGY + (S.bakBonus|0) + perkHave('bak')*C.PERK_BAK_N) *
   (isPremium() ? 1 + C.PREM_ENERGY_PCT : 1));
 // Все доливки считаются от текущего бака, поэтому не отстают от уровня
 const canEnergy     = () => Math.round(energyMax() * C.ENERGY_CAN_PCT);
@@ -1436,7 +1547,7 @@ const starterEnergy = () => Math.round(energyMax() * C.STARTER_ENERGY_PCT);
 const xpMult = () => 1 + C.XP_PER_QUEST_BONUS * (S.questsDone|0);
 /* Откат энергии зависит от размера бака: 1 в минуту на первой сотне и плюс
    ещё по одной за каждые следующие 100. На баке 400 это 4 в минуту. */
-const regenPerMin = () => Math.max(1, Math.floor(energyMax() / 100) * C.REGEN_PER_100);
+const regenPerMin = () => Math.max(1, Math.floor(energyMax() / 100) * C.REGEN_PER_100 + perkHave('regen'));
 const regenSec  = () => 60 / regenPerMin() / (isPremium() ? C.PREM_REGEN_MULT : 1);
 /* Цена доливки привязана к количеству энергии, а не к кнопке:
    ENERGY_GEMS_PER_100 алмазов за сотню, в «Пока дают» вдвое дешевле. */
@@ -1444,7 +1555,7 @@ const energyPrice = (amount, offer) => Math.max(1, Math.ceil(
   Math.max(0, amount) / 100 * (offer ? C.ENERGY_GEMS_OFFER : C.ENERGY_GEMS_PER_100)));
 // сколько не хватает до полного бака
 const energyGap = () => Math.max(0, Math.ceil(energyMax() - S.energy));
-const orderSlots= () => C.ORDER_SLOTS + (isPremium() ? C.ORDER_SLOTS_PREM : 0);
+const orderSlots= () => C.ORDER_SLOTS + (isPremium() ? C.ORDER_SLOTS_PREM : 0) + perkHave('slot');
 /* Множитель опыта на поздних уровнях: до XP_HARD_FROM обычный,
    дальше XP_HARD_MULT в степени пройденных сотен. */
 function xpHard(l){
@@ -2338,9 +2449,12 @@ function payOrder(i, viaCrew){
   const wasCap = coinCap();
   if(o.coins > (S.bestOrder||0)) S.bestOrder = o.coins;
   const nowCap = coinCap();
-  gainCoins(o.coins); S.xp += o.xp;
-  quest('coins', o.coins);
-  let msg = (viaCrew ? '👷 ' : '') + '+' + fmt(o.coins) + ' 🪙  +' + o.xp + ' XP';
+  // постоянная надбавка от купленных усилений считается здесь, а не в самом заказе
+  const bonus = Math.round(o.coins * perkCoin());
+  gainCoins(o.coins + bonus); S.xp += o.xp;
+  quest('coins', o.coins + bonus);
+  let msg = (viaCrew ? '👷 ' : '') + '+' + fmt(o.coins + bonus) + ' 🪙' +
+    (bonus ? ' (+' + Math.round(perkCoin()*100) + '%)' : '') + '  +' + o.xp + ' XP';
   if(o.chest){ S.pendingChests++; msg += '  +📦'; }
   if(o.gems){ earnGems(o.gems); msg += '  +' + o.gems + ' 💎'; }
   toast(msg); SFX.order(); haptic('ok');
@@ -3402,7 +3516,54 @@ function card(ic,t,d,btn,cls){
     '<div class="cb"><div class="ct">' + t + '</div><div class="cd">' + d + '</div></div>' + (btn||'') + '</div>';
 }
 // Цена товара: у большинства фиксированная, у доливок энергии считается от объёма
-const goodPrice = id => { const g = GOODS[id]; return g ? (g.dyn ? g.dyn() : g.gems) : 0; };
+/* Множитель цен по прогрессу: чем выше минимальный сброс банкомата, тем
+   дороже расходники. Энергия и так считается от бака, её не трогаем. */
+function priceIndex(){
+  return Math.min(C.PRICE_INDEX_MAX, 1 + genMin() / C.PRICE_INDEX_DIV);
+}
+const idx = n => Math.max(1, Math.round(n * priceIndex()));
+/* dyn — цена считается сама (энергия, наборы). Остальное индексируем. */
+const goodPrice = id => { const g = GOODS[id];
+  return g ? (g.dyn ? g.dyn() : (g.flat ? g.gems : idx(g.gems))) : 0; };
+
+/* ---------- ПОСТОЯННЫЕ УСИЛЕНИЯ ----------
+   Единственная категория, за которую в жанре реально платят: не расходник,
+   а сила навсегда. Каждое следующее того же типа дороже в PERK_PRICE_UP раз. */
+const PERKS = {
+  slot:  { ic:'📋', t:'Ещё один слот заказа', d:'Навсегда. Заказы приходят чаще, копить проще.',
+           cfg:()=>C.PERK_SLOT },
+  coin:  { ic:'🪙', t:'+10% монет за заказ',  d:'Навсегда. Складывается с каждой следующей покупкой.',
+           cfg:()=>C.PERK_COIN },
+  bak:   { ic:'⚡', t:'+' + 100 + ' к баку',  d:'Навсегда. И восстановление ускоряется вместе с баком.',
+           cfg:()=>C.PERK_BAK },
+  regen: { ic:'⏱️', t:'+1 энергии в минуту',  d:'Навсегда. Прямо к скорости восстановления.',
+           cfg:()=>C.PERK_REGEN },
+};
+const perkHave = k => (S.perks && S.perks[k]) | 0;
+const perkMax  = k => PERKS[k].cfg()[1];
+const perkLeft = k => Math.max(0, perkMax(k) - perkHave(k));
+function perkPrice(k){
+  const [base] = PERKS[k].cfg();
+  return Math.max(1, Math.round(base * Math.pow(C.PERK_PRICE_UP, perkHave(k))));
+}
+function perkBuy(k){
+  if(!PERKS[k] || perkLeft(k) <= 0) return;
+  const p = perkPrice(k);
+  if(!spendGems(p)) return;
+  S.perks[k] = perkHave(k) + 1;
+  SFX.level(); haptic('ok');
+  const после = k === 'slot'  ? 'Слотов заказа: ' + orderSlots()
+              : k === 'coin'  ? 'Монет за заказ: +' + Math.round(perkCoin()*100) + '%'
+              : k === 'bak'   ? 'Бак: ' + energyMax() + ' ⚡'
+              :                 'Восстановление: ' + regenPerMin() + ' в минуту';
+  openSheet('<div class="bigem">' + PERKS[k].ic + '</div>' +
+    '<h3 class="sh-h">' + PERKS[k].t + '</h3>' +
+    '<p class="sh-p">' + после + '<br>Это навсегда — круги престижа не сбрасывают.</p>' +
+    '<div class="sh-row"><button class="btn gr" data-act="close">Отлично</button></div>');
+  renderAll(); save();
+}
+// Постоянная надбавка к монетам за заказ
+const perkCoin = () => perkHave('coin') * C.PERK_COIN_N;
 /* Цена набора: энергия по текущему баку плюс фиксированная часть, со скидкой.
    Так набор всегда выгоднее, чем брать по отдельности, но не бесплатный. */
 const mixPrice = (tanks, rest) => Math.max(1, Math.round(
@@ -3412,14 +3573,48 @@ const gemBtn = id => '<button class="buy gem" data-act="gbuy" data-id="' + id + 
 function renderShop(){
   let h = '';
   h += card('💎','У тебя ' + fmt(S.gems) + ' алмазов',
-    'Алмазы — единственная платная валюта. За звёзды покупаются только они.','','gemhero');
+    'За звёзды берутся и алмазы, и готовые наборы — сразу тем, что нужно в игре.','','gemhero');
+
+  /* Товары за звёзды идут ПЕРВЫМИ. Раньше цепочка была «звёзды → алмазы →
+     товар», и на высоком уровне пак покупал пять тапов. Теперь звёзды сразу
+     превращаются в игру. */
+  h += '<h2 class="sec">За звёзды сразу</h2>';
+  for(const g of STAR_GOODS){
+    if(g.once && ((S.invApplied[g.id])|0) > 0) continue;   // разовый уже взят
+    h += card(g.em, g.title + (g.tag ? '<span class="tagline">' + g.tag + '</span>' : ''),
+      g.d(),
+      '<button class="buy stars" data-act="pack" data-id="' + g.id + '">' + g.stars + ' ⭐</button>',
+      g.id === 'vip_box' ? 'hero' : '');
+  }
+
   h += '<h2 class="sec">Паки алмазов</h2>';
+  if(!S.firstBuy)
+    h += '<div class="note" style="margin:0 0 8px;color:var(--gold)">' +
+      '🎉 <b>Первая покупка — алмазы удваиваются.</b> Один раз за всю игру, любой пак.</div>';
   for(const p of PACKS){
-    h += card(p.em, p.title + ' · ' + p.gems + ' 💎' + (p.bonus ? '<span class="tagline">+' + p.bonus + '%</span>' : ''),
-      (p.gems/p.stars).toFixed(1) + ' алмаза за звезду',
+    const dbl = !S.firstBuy;
+    h += card(p.em, p.title + ' · ' + (dbl ? '<s style="opacity:.5">' + p.gems + '</s> ' +
+        fmt(p.gems*2) : p.gems) + ' 💎' +
+      (dbl ? '<span class="tagline">×2</span>' : p.bonus ? '<span class="tagline">+' + p.bonus + '%</span>' : ''),
+      ((dbl ? p.gems*2 : p.gems)/p.stars).toFixed(1) + ' алмаза за звезду',
       '<button class="buy stars" data-act="pack" data-id="' + p.id + '">' + p.stars + ' ⭐</button>',
       p.stars === 100 ? 'hero' : '');
   }
+
+  /* Постоянные усиления. Единственная категория, за которую в жанре реально
+     платят: не расходник, а сила навсегда. Круги престижа их не сбрасывают. */
+  h += '<h2 class="sec">Навсегда</h2>';
+  for(const k of Object.keys(PERKS)){
+    const P = PERKS[k], have = perkHave(k), left = perkLeft(k), pr = perkPrice(k);
+    h += card(P.ic, P.t + '<span class="pill' + (left ? ' g' : '') + '">' + have + ' / ' + perkMax(k) + '</span>',
+      P.d + (left ? '' : '<br><b style="color:var(--green)">Всё выкуплено</b>'),
+      left
+        ? '<button class="buy gem" data-act="perk" data-k="' + k + '"' +
+          (S.gems < pr ? ' disabled' : '') + '>' + fmt(pr) + ' 💎</button>'
+        : '<button class="buy" disabled>готово</button>');
+  }
+  h += '<div class="note" style="margin:0 0 10px">Каждое следующее того же вида дороже в ' +
+    C.PERK_PRICE_UP + ' раза. Это не расходник — остаётся навсегда, круги престижа не сбрасывают.</div>';
   h += '<h2 class="sec">Бензин для банкомата</h2>';
   h += card('⚡','Залить под пробку',
     (S.energy > energyMax() ? 'В баке ' + Math.floor(S.energy) + ' при максимуме ' + energyMax() + ' — излишек не пропадёт'
@@ -4028,6 +4223,7 @@ document.addEventListener('click', e=>{
     case 'bizcopy':  bizCopy(); return;
     case 'bizclaim': bizClaim(b.dataset.id); return;
     case 'bizrank':  bizClaimRank(); return;
+    case 'perk':     perkBuy(b.dataset.k); return;
     case 'crew':     crewSend(+b.dataset.i); return;
     case 'bag':      bagSheet(b.dataset.id || ''); return;
     case 'usebat':   useBattery(b.dataset.src || ''); return;
@@ -4076,13 +4272,16 @@ document.addEventListener('click', e=>{
 /* ============ ЦИКЛ ============ */
 /* Окно в самой игре сразу после зачисления. В бота ничего не пишем:
    переписка с ботом уводит человека из игры. */
-function payDone(gems, pack){
+function payDone(gems, pack, doubled){
   const p = pack || PACKS.find(x=>x.id === S.payPack);
   S.payPending = 0; S.payPack = ''; saveNow();
   SFX.gem(); haptic('ok'); renderAll();
   openSheet('<div class="bigem">💎</div>' +
-    '<h3 class="sh-h">' + (p ? p.title + ' у тебя' : 'Алмазы зачислены') + '</h3>' +
-    '<p class="sh-p">На счёт упало <b>' + fmt(gems) + ' 💎</b>. Трать с умом — или не с умом, дело твоё.</p>' +
+    '<h3 class="sh-h">' + (p ? p.title + ' у тебя' : 'Алмазы зачислены') +
+      (doubled ? '<span class="pill g">×2</span>' : '') + '</h3>' +
+    '<p class="sh-p">На счёт упало <b>' + fmt(gems) + ' 💎</b>.' +
+      (doubled ? '<br>Первая покупка — алмазы удвоены.' : '') +
+      ' Трать с умом — или не с умом, дело твоё.</p>' +
     '<div class="sh-row"><button class="btn gr" data-act="close">Отлично</button></div>');
 }
 
